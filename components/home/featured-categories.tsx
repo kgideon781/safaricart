@@ -1,8 +1,12 @@
 import Link from "next/link";
 import Image from "next/image";
-import { featuredCategories } from "@/lib/mock";
+import { getFeaturedCategories } from "@/server/queries/catalog";
 
-export function FeaturedCategories() {
+export async function FeaturedCategories() {
+  const categories = await getFeaturedCategories();
+
+  if (categories.length === 0) return null;
+
   return (
     <section className="mx-auto w-full max-w-7xl px-4 py-12 md:px-6">
       <div className="mb-6 flex items-end justify-between gap-4">
@@ -23,20 +27,22 @@ export function FeaturedCategories() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-        {featuredCategories.map((cat) => (
+        {categories.map((cat) => (
           <Link
             key={cat.slug}
             href={`/category/${cat.slug}`}
             className="group flex flex-col overflow-hidden rounded-lg border border-border bg-card transition-shadow hover:shadow-md"
           >
             <div className="relative aspect-[4/3] overflow-hidden bg-muted">
-              <Image
-                src={cat.imageUrl}
-                alt={cat.name}
-                fill
-                sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 16vw"
-                className="object-cover transition-transform duration-300 group-hover:scale-105"
-              />
+              {cat.imageUrl && (
+                <Image
+                  src={cat.imageUrl}
+                  alt={cat.name}
+                  fill
+                  sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 16vw"
+                  className="object-cover transition-transform duration-300 group-hover:scale-105"
+                />
+              )}
             </div>
             <div className="p-3 text-center">
               <span className="text-sm font-medium group-hover:text-primary">

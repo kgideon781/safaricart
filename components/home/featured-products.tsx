@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { ProductCard } from "@/components/product/product-card";
-import { featuredProducts } from "@/lib/mock";
+import { getFeaturedProducts } from "@/server/queries/catalog";
 
-export function FeaturedProducts() {
+export async function FeaturedProducts() {
+  const products = await getFeaturedProducts();
+
+  if (products.length === 0) return null;
+
   return (
     <section className="mx-auto w-full max-w-7xl px-4 py-12 md:px-6">
       <div className="mb-6 flex items-end justify-between gap-4">
@@ -23,7 +27,7 @@ export function FeaturedProducts() {
       </div>
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
-        {featuredProducts.map((p) => (
+        {products.map((p) => (
           <ProductCard key={p.slug} product={p} />
         ))}
       </div>

@@ -3,10 +3,10 @@ import Image from "next/image";
 import { BadgeCheck, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatKES } from "@/lib/kenya";
-import type { MockProduct } from "@/lib/mock";
+import type { ProductCardData } from "@/server/queries/catalog";
 
 type ProductCardProps = {
-  product: MockProduct;
+  product: ProductCardData;
 };
 
 export function ProductCard({ product }: ProductCardProps) {
@@ -27,13 +27,15 @@ export function ProductCard({ product }: ProductCardProps) {
         href={`/product/${product.slug}`}
         className="relative block aspect-square overflow-hidden bg-muted"
       >
-        <Image
-          src={product.imageUrl}
-          alt={product.title}
-          fill
-          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-          className="object-cover transition-transform duration-300 group-hover:scale-105"
-        />
+        {product.image && (
+          <Image
+            src={product.image}
+            alt={product.title}
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            className="object-cover transition-transform duration-300 group-hover:scale-105"
+          />
+        )}
         {onSale && (
           <Badge className="absolute left-2 top-2 bg-accent text-accent-foreground">
             -{discountPct}%
@@ -71,11 +73,14 @@ export function ProductCard({ product }: ProductCardProps) {
           <span className="flex items-center gap-0.5 text-accent">
             <Star className="size-3.5 fill-current" />
             <span className="font-medium text-foreground">
-              {product.rating.toFixed(1)}
+              {product.reviewCount === 0 ? "—" : product.rating.toFixed(1)}
             </span>
           </span>
           <span>·</span>
-          <span>{product.reviewCount.toLocaleString("en-KE")} reviews</span>
+          <span>
+            {product.reviewCount.toLocaleString("en-KE")} review
+            {product.reviewCount === 1 ? "" : "s"}
+          </span>
         </div>
 
         <div className="mt-auto flex items-center gap-1 pt-2 text-xs text-muted-foreground">
