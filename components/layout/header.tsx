@@ -11,13 +11,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { auth } from "@/server/auth";
+import { logoutAction } from "@/server/actions/auth";
 
 const menuLinkClass = "flex w-full px-1.5 py-1";
 
-export function Header() {
-  // TODO: wire to real cart and auth once those exist.
+export async function Header() {
+  const session = await auth();
+  const user = session?.user;
+
+  // TODO: read real cart count once cart is implemented (chunk 9).
   const cartCount: number = 0;
-  const isLoggedIn = false;
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
@@ -56,12 +60,14 @@ export function Header() {
         </form>
 
         <nav className="ml-auto flex items-center gap-1 md:gap-2">
-          <Link
-            href="/vendor/register"
-            className={`${buttonVariants({ variant: "ghost", size: "sm" })} hidden lg:inline-flex`}
-          >
-            Sell on SafariCart
-          </Link>
+          {user?.role !== "VENDOR" && user?.role !== "ADMIN" && (
+            <Link
+              href="/vendor/register"
+              className={`${buttonVariants({ variant: "ghost", size: "sm" })} hidden lg:inline-flex`}
+            >
+              Sell on SafariCart
+            </Link>
+          )}
 
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -72,9 +78,17 @@ export function Header() {
               <User className="size-5" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              {isLoggedIn ? (
+              {user ? (
                 <>
-                  <DropdownMenuLabel>My account</DropdownMenuLabel>
+                  <DropdownMenuLabel className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium text-foreground">
+                      {user.name ?? "Account"}
+                    </span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {user.email}
+                    </span>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem className="p-0">
                     <Link href="/account" className={menuLinkClass}>
                       Profile
@@ -90,11 +104,30 @@ export function Header() {
                       Addresses
                     </Link>
                   </DropdownMenuItem>
+                  {user.role === "VENDOR" && (
+                    <DropdownMenuItem className="p-0">
+                      <Link href="/vendor/dashboard" className={menuLinkClass}>
+                        Vendor dashboard
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  {user.role === "ADMIN" && (
+                    <DropdownMenuItem className="p-0">
+                      <Link href="/admin" className={menuLinkClass}>
+                        Admin panel
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem className="p-0">
-                    <Link href="/api/auth/signout" className={menuLinkClass}>
-                      Sign out
-                    </Link>
+                    <form action={logoutAction} className="w-full">
+                      <button
+                        type="submit"
+                        className={`${menuLinkClass} text-left`}
+                      >
+                        Sign out
+                      </button>
+                    </form>
                   </DropdownMenuItem>
                 </>
               ) : (
