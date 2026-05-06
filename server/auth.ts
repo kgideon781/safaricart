@@ -4,6 +4,7 @@ import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { UserRole } from "@prisma/client";
 import { db } from "@/server/db";
@@ -88,3 +89,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
 });
+
+/**
+ * Read the current session, or redirect to /login if the user is not signed in.
+ * Use from server components / actions that must have an authenticated user.
+ */
+export async function requireSession(callbackUrl?: string) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    const target = callbackUrl
+      ? `/login?callbackUrl=${encodeURIComponent(callbackUrl)}`
+      : "/login";
+    redirect(target);
+  }
+  return session;
+}
+
+/** Same as requireSession but additionally enforces a role. */
+export async function requireRole(role: UserRole, callbackUrl?: string) {
+  const session = await requireSession(callbackUrl);
+  if (session.user.role !== role) redirect("/");
+  return session;
+}
