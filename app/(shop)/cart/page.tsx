@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import type { Metadata } from "next";
 import { ShoppingBag, Trash2 } from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
   Card,
@@ -191,10 +191,12 @@ export default async function CartPage() {
                 {formatKES(totalKes)}
               </span>
             </div>
-            {/* TODO: wire to /checkout in chunk 12 */}
-            <Button size="lg" className="mt-3 w-full" disabled>
+            <Link
+              href="/checkout"
+              className={`${buttonVariants({ size: "lg" })} mt-3 w-full`}
+            >
               Proceed to checkout
-            </Button>
+            </Link>
             <p className="text-center text-xs text-muted-foreground">
               Pay with M-Pesa, card, or cash on delivery.
             </p>
