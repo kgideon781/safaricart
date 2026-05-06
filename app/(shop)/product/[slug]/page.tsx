@@ -7,6 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { getProductBySlug } from "@/server/queries/catalog";
+import {
+  addToCartAction,
+  addToCartAndCheckoutAction,
+} from "@/server/actions/cart";
 import { formatKES } from "@/lib/kenya";
 
 type RouteParams = Promise<{ slug: string }>;
@@ -162,14 +166,29 @@ export default async function ProductPage({
 
           <Separator className="my-6" />
 
-          {/* TODO: wire to cart server action in chunk 9 */}
           <div className="flex gap-3">
-            <Button size="lg" className="flex-1" disabled={!inStock}>
-              {inStock ? "Add to cart" : "Out of stock"}
-            </Button>
-            <Button size="lg" variant="outline" disabled={!inStock}>
-              Buy now
-            </Button>
+            <form action={addToCartAction} className="flex-1">
+              <input type="hidden" name="productId" value={product.id} />
+              <Button
+                type="submit"
+                size="lg"
+                className="w-full"
+                disabled={!inStock}
+              >
+                {inStock ? "Add to cart" : "Out of stock"}
+              </Button>
+            </form>
+            <form action={addToCartAndCheckoutAction}>
+              <input type="hidden" name="productId" value={product.id} />
+              <Button
+                type="submit"
+                size="lg"
+                variant="outline"
+                disabled={!inStock}
+              >
+                Buy now
+              </Button>
+            </form>
           </div>
         </div>
       </div>

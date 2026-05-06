@@ -8,6 +8,7 @@ import { z } from "zod";
 import type { UserRole } from "@prisma/client";
 import { db } from "@/server/db";
 import { env } from "@/server/env";
+import { maybeMergeGuestCartIntoDb } from "@/server/cart";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -73,6 +74,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.role = token.role as UserRole;
       }
       return session;
+    },
+  },
+  events: {
+    async signIn({ user }) {
+      if (user.id) {
+        try {
+          await maybeMergeGuestCartIntoDb(user.id);
+        } catch (error) {
+          console.error("Failed to merge guest cart on sign-in:", error);
+        }
+      }
     },
   },
 });

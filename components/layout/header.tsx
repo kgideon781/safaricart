@@ -13,15 +13,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { auth } from "@/server/auth";
 import { logoutAction } from "@/server/actions/auth";
+import { getCartCount } from "@/server/cart";
 
 const menuLinkClass = "flex w-full px-1.5 py-1";
 
 export async function Header() {
-  const session = await auth();
+  const [session, cartCount] = await Promise.all([auth(), getCartCount()]);
   const user = session?.user;
-
-  // TODO: read real cart count once cart is implemented (chunk 9).
-  const cartCount: number = 0;
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
