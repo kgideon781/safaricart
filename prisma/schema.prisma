@@ -1,0 +1,360 @@
+// SafariCart database schema
+//
+// Conventions
+//   • Money is stored as integer KES (no subdivision). Field names ending in
+//     `Kes` make the unit explicit. KES is a zero-decimal currency in both
+//     Stripe and M-Pesa, so no conversion is needed.
+//   • Phone numbers are E.164 strings (+254XXXXXXXXX). Normalize at app layer
+//     with `normalizeKenyanPhone()` before persisting.
+//   • `county` is a String, validated against `KENYAN_COUNTIES` (lib/kenya.ts)
+//     at the app layer rather than as a Postgres enum — easier to evolve.
+//   • IDs are CUIDs.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ────────────────────────────────────────────────────────────
+// Authentication (Auth.js v5 / @auth/prisma-adapter)
+// ────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+  phone         String?   @unique // E.164; nullable so users can register email-only
+  passwordHash  String? // null for OAuth-only accounts
+  role          UserRole  @default(CUSTOMER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts  Account[]
+  sessions  Session[]
+  vendor    Vendor?
+  addresses Address[]
+  orders    Order[]
+  cart      Cart?
+  reviews   Review[]
+}
+
+enum UserRole {
+  CUSTOMER
+  VENDOR
+  ADMIN
+}
+
+// Field names below are snake_case to match the Auth.js Prisma adapter spec.
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ────────────────────────────────────────────────────────────
+// Vendors
+// ────────────────────────────────────────────────────────────
+
+model Vendor {
+  id          String       @id @default(cuid())
+  userId      String       @unique
+  slug        String       @unique
+  name        String
+  description String?
+  logoUrl     String?
+  coverUrl    String?
+  status      VendorStatus @default(PENDING)
+  verifiedAt  DateTime?
+
+  contactEmail String
+  contactPhone String // E.164
+  county       String // one of KENYAN_COUNTIES
+
+  // Payout — one of these is populated (preferences vary by vendor)
+  mpesaPaybill      String?
+  mpesaTillNumber   String?
+  bankName          String?
+  bankAccountName   String?
+  bankAccountNumber String?
+
+  // Platform commission in basis points (10000 = 100%, 1000 = 10%).
+  // Stored per-vendor to allow case-by-case negotiation.
+  commissionBps Int @default(1000)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  products   Product[]
+  orderItems OrderItem[]
+
+  @@index([status])
+}
+
+enum VendorStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+}
+
+// ────────────────────────────────────────────────────────────
+// Catalog
+// ────────────────────────────────────────────────────────────
+
+model Category {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  imageUrl    String?
+  parentId    String?
+  sortOrder   Int      @default(0)
+  isFeatured  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[] @relation("CategoryTree")
+  products Product[]
+
+  @@index([parentId])
+  @@index([isFeatured])
+}
+
+model Product {
+  id                String   @id @default(cuid())
+  slug              String   @unique
+  title             String
+  description       String
+  vendorId          String
+  categoryId        String
+  priceKes          Int
+  compareAtPriceKes Int? // for "was X, now Y" sale UI
+  sku               String?
+  stock             Int      @default(0)
+  weightGrams       Int? // for shipping calc
+  images            String[] // URLs; first is primary
+  isPublished       Boolean  @default(false)
+  isFeatured        Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  vendor     Vendor      @relation(fields: [vendorId], references: [id])
+  category   Category    @relation(fields: [categoryId], references: [id])
+  orderItems OrderItem[]
+  cartItems  CartItem[]
+  reviews    Review[]
+
+  @@unique([vendorId, sku])
+  @@index([vendorId, isPublished])
+  @@index([categoryId, isPublished])
+  @@index([isFeatured, isPublished])
+}
+
+// ────────────────────────────────────────────────────────────
+// Addresses
+// ────────────────────────────────────────────────────────────
+
+model Address {
+  id             String   @id @default(cuid())
+  userId         String
+  label          String? // "Home", "Work"
+  recipientName  String
+  recipientPhone String // E.164
+  county         String
+  subCounty      String?
+  ward           String?
+  streetAddress  String
+  landmark       String? // common in Kenyan addresses ("near KFC junction")
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ────────────────────────────────────────────────────────────
+// Cart (persistent, logged-in users only; guests use session storage)
+// ────────────────────────────────────────────────────────────
+
+model Cart {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items CartItem[]
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  cartId    String
+  productId String
+  quantity  Int      @default(1)
+  addedAt   DateTime @default(now())
+
+  cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, productId])
+  @@index([productId])
+}
+
+// ────────────────────────────────────────────────────────────
+// Orders
+// Address and product details are SNAPSHOTTED at order time so historical
+// orders remain accurate even if the product or address is later edited.
+// ────────────────────────────────────────────────────────────
+
+model Order {
+  id          String      @id @default(cuid())
+  orderNumber String      @unique // human-readable, e.g. SC-202605-00001
+  userId      String
+  status      OrderStatus @default(PENDING)
+
+  // Money (KES)
+  subtotalKes    Int
+  shippingFeeKes Int @default(0)
+  totalKes       Int
+
+  // Shipping address snapshot
+  shippingRecipientName  String
+  shippingRecipientPhone String
+  shippingCounty         String
+  shippingSubCounty      String?
+  shippingStreetAddress  String
+  shippingLandmark       String?
+
+  // Payment
+  paymentMethod    PaymentMethod
+  paymentReference String? // gateway-specific transaction ID
+  paidAt           DateTime?
+
+  placedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user  User        @relation(fields: [userId], references: [id])
+  items OrderItem[]
+
+  @@index([userId, placedAt])
+  @@index([status, placedAt])
+}
+
+enum OrderStatus {
+  PENDING
+  AWAITING_PAYMENT
+  PAID
+  FULFILLING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  MPESA
+  PAYSTACK
+  STRIPE
+  CASH_ON_DELIVERY
+}
+
+model OrderItem {
+  id        String @id @default(cuid())
+  orderId   String
+  productId String
+  vendorId  String // denormalized for fast vendor-side queries
+
+  // Snapshot fields (preserve history if product is edited or deleted)
+  productTitle String
+  productImage String?
+  unitPriceKes Int
+  quantity     Int
+  subtotalKes  Int
+
+  // Per-item fulfillment — one order can have items from multiple vendors,
+  // each shipping on its own timeline.
+  fulfillmentStatus OrderItemFulfillmentStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+  vendor  Vendor  @relation(fields: [vendorId], references: [id])
+
+  @@index([orderId])
+  @@index([vendorId, fulfillmentStatus])
+  @@index([productId])
+}
+
+enum OrderItemFulfillmentStatus {
+  PENDING
+  FULFILLING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+// ────────────────────────────────────────────────────────────
+// Reviews
+// ────────────────────────────────────────────────────────────
+
+model Review {
+  id        String   @id @default(cuid())
+  productId String
+  userId    String
+  rating    Int // 1–5; validate at app layer with Zod
+  title     String?
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, userId]) // one review per user per product
+  @@index([productId])
+  @@index([userId])
+}
