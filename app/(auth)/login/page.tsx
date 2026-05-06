@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { auth } from "@/server/auth";
+import { auth, enabledOAuthProviders } from "@/server/auth";
 import { redirect } from "next/navigation";
 import { LoginForm } from "./login-form";
-import { env } from "@/server/env";
+import { ProviderButtons } from "@/components/auth/provider-buttons";
 import {
   Card,
   CardContent,
@@ -23,7 +23,7 @@ export default async function LoginPage({
 
   const params = await searchParams;
   const justRegistered = params.registered === "1";
-  const googleEnabled = Boolean(env.AUTH_GOOGLE_ID && env.AUTH_GOOGLE_SECRET);
+  const enabled = enabledOAuthProviders();
 
   return (
     <Card>
@@ -35,9 +35,10 @@ export default async function LoginPage({
             : "Sign in to your SafariCart account."}
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <LoginForm googleEnabled={googleEnabled} />
-        <p className="mt-6 text-center text-sm text-muted-foreground">
+      <CardContent className="flex flex-col gap-4">
+        <ProviderButtons enabled={enabled} />
+        <LoginForm />
+        <p className="text-center text-sm text-muted-foreground">
           New here?{" "}
           <Link href="/register" className="font-medium text-primary hover:underline">
             Create an account

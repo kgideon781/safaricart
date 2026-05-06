@@ -108,6 +108,14 @@ export async function googleLoginAction() {
   await signIn("google", { redirectTo: "/" });
 }
 
+export async function facebookLoginAction() {
+  await signIn("facebook", { redirectTo: "/" });
+}
+
+export async function githubLoginAction() {
+  await signIn("github", { redirectTo: "/" });
+}
+
 export async function redirectToHome() {
   redirect("/");
 }

@@ -2,6 +2,8 @@ import "server-only";
 import NextAuth, { type NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
+import Facebook from "next-auth/providers/facebook";
+import GitHub from "next-auth/providers/github";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
@@ -52,6 +54,32 @@ if (env.AUTH_GOOGLE_ID && env.AUTH_GOOGLE_SECRET) {
       clientSecret: env.AUTH_GOOGLE_SECRET,
     }),
   );
+}
+
+if (env.AUTH_FACEBOOK_ID && env.AUTH_FACEBOOK_SECRET) {
+  providers.push(
+    Facebook({
+      clientId: env.AUTH_FACEBOOK_ID,
+      clientSecret: env.AUTH_FACEBOOK_SECRET,
+    }),
+  );
+}
+
+if (env.AUTH_GITHUB_ID && env.AUTH_GITHUB_SECRET) {
+  providers.push(
+    GitHub({
+      clientId: env.AUTH_GITHUB_ID,
+      clientSecret: env.AUTH_GITHUB_SECRET,
+    }),
+  );
+}
+
+export function enabledOAuthProviders() {
+  return {
+    google: Boolean(env.AUTH_GOOGLE_ID && env.AUTH_GOOGLE_SECRET),
+    facebook: Boolean(env.AUTH_FACEBOOK_ID && env.AUTH_FACEBOOK_SECRET),
+    github: Boolean(env.AUTH_GITHUB_ID && env.AUTH_GITHUB_SECRET),
+  };
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({

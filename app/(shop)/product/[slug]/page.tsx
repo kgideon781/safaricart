@@ -6,11 +6,9 @@ import { BadgeCheck, MapPin, Star, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { AddToCartForm } from "@/components/product/add-to-cart-form";
 import { getProductBySlug } from "@/server/queries/catalog";
-import {
-  addToCartAction,
-  addToCartAndCheckoutAction,
-} from "@/server/actions/cart";
+import { addToCartAndCheckoutAction } from "@/server/actions/cart";
 import { formatKES } from "@/lib/kenya";
 
 type RouteParams = Promise<{ slug: string }>;
@@ -167,17 +165,9 @@ export default async function ProductPage({
           <Separator className="my-6" />
 
           <div className="flex gap-3">
-            <form action={addToCartAction} className="flex-1">
-              <input type="hidden" name="productId" value={product.id} />
-              <Button
-                type="submit"
-                size="lg"
-                className="w-full"
-                disabled={!inStock}
-              >
-                {inStock ? "Add to cart" : "Out of stock"}
-              </Button>
-            </form>
+            <div className="flex-1">
+              <AddToCartForm productId={product.id} inStock={inStock} />
+            </div>
             <form action={addToCartAndCheckoutAction}>
               <input type="hidden" name="productId" value={product.id} />
               <Button

@@ -10,6 +10,10 @@ const envSchema = z.object({
   AUTH_URL: z.string().url().optional(),
   AUTH_GOOGLE_ID: z.string().optional(),
   AUTH_GOOGLE_SECRET: z.string().optional(),
+  AUTH_FACEBOOK_ID: z.string().optional(),
+  AUTH_FACEBOOK_SECRET: z.string().optional(),
+  AUTH_GITHUB_ID: z.string().optional(),
+  AUTH_GITHUB_SECRET: z.string().optional(),
 
   MPESA_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
   MPESA_CONSUMER_KEY: z.string().optional(),
