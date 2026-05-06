@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -78,14 +79,16 @@ export async function Header() {
             <DropdownMenuContent align="end" className="w-56">
               {user ? (
                 <>
-                  <DropdownMenuLabel className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium text-foreground">
-                      {user.name ?? "Account"}
-                    </span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {user.email}
-                    </span>
-                  </DropdownMenuLabel>
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel className="flex flex-col gap-0.5">
+                      <span className="text-sm font-medium text-foreground">
+                        {user.name ?? "Account"}
+                      </span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        {user.email}
+                      </span>
+                    </DropdownMenuLabel>
+                  </DropdownMenuGroup>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem className="p-0">
                     <Link href="/account" className={menuLinkClass}>
