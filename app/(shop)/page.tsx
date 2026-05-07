@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Hero } from "@/components/home/hero";
 import { FeaturedCategories } from "@/components/home/featured-categories";
 import { FeaturedProducts } from "@/components/home/featured-products";
+import { HotDeals } from "@/components/home/hot-deals";
 import { publicAppUrl } from "@/server/env";
 
 const description =
@@ -36,6 +37,7 @@ export default function HomePage() {
     <>
       <Hero />
       <FeaturedCategories />
+      <HotDeals />
       <FeaturedProducts />
     </>
   );

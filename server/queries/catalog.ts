@@ -212,6 +212,64 @@ export async function searchProducts(
   return paged(rows.map(toProductCardData), total, pagination);
 }
 
+/** Products with a `compareAtPriceKes` set — i.e., on sale. */
+export async function getDealsProducts(
+  pagination: Pagination,
+): Promise<Paged<ProductCardData>> {
+  const where: Prisma.ProductWhereInput = {
+    ...PUBLIC_PRODUCT_FILTER,
+    // Trust vendor input. Cards re-validate `compareAtPriceKes > priceKes`
+    // before rendering the discount badge, so any noise here renders cleanly.
+    compareAtPriceKes: { not: null, gt: 0 },
+  };
+  const [rows, total] = await Promise.all([
+    db.product.findMany({
+      where,
+      include: PRODUCT_CARD_INCLUDE,
+      orderBy: { createdAt: "desc" },
+      skip: (pagination.page - 1) * pagination.perPage,
+      take: pagination.perPage,
+    }),
+    db.product.count({ where }),
+  ]);
+  return paged(rows.map(toProductCardData), total, pagination);
+}
+
+/** Most recently published products. */
+export async function getNewArrivals(
+  pagination: Pagination,
+): Promise<Paged<ProductCardData>> {
+  const [rows, total] = await Promise.all([
+    db.product.findMany({
+      where: PUBLIC_PRODUCT_FILTER,
+      include: PRODUCT_CARD_INCLUDE,
+      orderBy: { createdAt: "desc" },
+      skip: (pagination.page - 1) * pagination.perPage,
+      take: pagination.perPage,
+    }),
+    db.product.count({ where: PUBLIC_PRODUCT_FILTER }),
+  ]);
+  return paged(rows.map(toProductCardData), total, pagination);
+}
+
+export async function getCategoryListWithCounts() {
+  return db.category.findMany({
+    where: { parentId: null },
+    orderBy: { sortOrder: "asc" },
+    select: {
+      slug: true,
+      name: true,
+      description: true,
+      imageUrl: true,
+      _count: {
+        select: {
+          products: { where: PUBLIC_PRODUCT_FILTER },
+        },
+      },
+    },
+  });
+}
+
 export async function getProductsByVendor(
   vendorSlug: string,
   pagination: Pagination,

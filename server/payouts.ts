@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/server/db";
 import { logger } from "@/server/log";
+import { notifyAdminsFirstVendorOrder } from "@/server/email/admin";
 
 const log = logger("payouts");
 
@@ -27,8 +28,18 @@ export function vendorShare(subtotalKes: number, commissionBps: number): {
 export async function creditVendorsForOrder(orderId: string): Promise<void> {
   const items = await db.orderItem.findMany({
     where: { orderId },
-    include: { vendor: { select: { id: true, commissionBps: true } } },
+    include: {
+      vendor: { select: { id: true, commissionBps: true, name: true, slug: true } },
+      order: { select: { orderNumber: true, totalKes: true } },
+    },
   });
+
+  // Track each vendor's first sale so we can notify admins once per vendor
+  // even if they have multiple line items in the same order.
+  const firstSaleNotifications = new Map<
+    string,
+    { vendorName: string; vendorSlug: string; orderNumber: string; totalKes: number }
+  >();
 
   for (const item of items) {
     const existing = await db.vendorLedgerEntry.findFirst({
@@ -36,6 +47,20 @@ export async function creditVendorsForOrder(orderId: string): Promise<void> {
       select: { id: true },
     });
     if (existing) continue;
+
+    if (!firstSaleNotifications.has(item.vendorId)) {
+      const priorSales = await db.vendorLedgerEntry.count({
+        where: { vendorId: item.vendorId, type: "SALE_CREDIT" },
+      });
+      if (priorSales === 0) {
+        firstSaleNotifications.set(item.vendorId, {
+          vendorName: item.vendor.name,
+          vendorSlug: item.vendor.slug,
+          orderNumber: item.order.orderNumber,
+          totalKes: item.order.totalKes,
+        });
+      }
+    }
 
     const { vendorKes, commissionKes } = vendorShare(
       item.subtotalKes,
@@ -68,6 +93,12 @@ export async function creditVendorsForOrder(orderId: string): Promise<void> {
   }
 
   log.info("vendor credits posted", { orderId, items: items.length });
+
+  for (const v of firstSaleNotifications.values()) {
+    notifyAdminsFirstVendorOrder(v).catch((err) =>
+      log.error("first-sale notify failed", { err: String(err) }),
+    );
+  }
 }
 
 /**

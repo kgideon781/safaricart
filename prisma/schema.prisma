@@ -357,6 +357,7 @@ model Coupon {
   vendor      Vendor?            @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   redemptions CouponRedemption[]
   orders      Order[]
+  campaigns   Campaign[]
 
   @@index([isActive, expiresAt])
 }
@@ -618,4 +619,42 @@ enum PayoutStatus {
 enum PayoutMethod {
   MPESA
   BANK
+}
+
+// ────────────────────────────────────────────────────────────
+// Marketing
+// ────────────────────────────────────────────────────────────
+
+// Site-wide promotional banner. Active when isActive AND (startsAt..endsAt)
+// covers now. The associated coupon (optional) lets a Black Friday campaign
+// be one entity from the admin's POV: banner advertises code, code applies
+// the discount via the existing CouponRedemption flow.
+model Campaign {
+  id           String   @id @default(cuid())
+  title        String // admin-only label, never shown publicly
+  message      String // the banner text shown to all visitors
+  ctaLabel     String?
+  ctaHref      String?
+  couponId     String?
+  startsAt     DateTime @default(now())
+  endsAt       DateTime
+  isActive     Boolean  @default(true)
+  isDismissible Boolean @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  coupon Coupon? @relation(fields: [couponId], references: [id], onDelete: SetNull)
+
+  @@index([isActive, startsAt, endsAt])
+}
+
+// Newsletter subscribers captured from the footer form. Email is the natural
+// key; resubscribe is a no-op (upsert). Unsubscribed rows are kept for audit
+// rather than deleted.
+model NewsletterSubscriber {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  subscribedAt   DateTime  @default(now())
+  unsubscribedAt DateTime?
+  source         String? // optional context: "footer", "checkout", etc.
 }

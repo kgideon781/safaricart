@@ -11,8 +11,12 @@ import { KENYAN_COUNTIES, normalizeKenyanPhone } from "@/lib/kenya";
 import { slugify } from "@/lib/text";
 import { creditVendorsForOrder } from "@/server/payouts";
 import { vendorPayableKes } from "@/server/payouts";
+import { notifyAdminsNewVendor, notifyAdminsKycUpload } from "@/server/email/admin";
+import { logger } from "@/server/log";
 import type { FormResult } from "@/server/actions/account";
 import type { VendorDocumentType } from "@prisma/client";
+
+const log = logger("vendor-actions");
 
 // ─── Vendor registration ──────────────────────────────────────────────────
 
@@ -94,6 +98,13 @@ export async function registerVendorAction(
       data: { role: "VENDOR" },
     });
   });
+
+  notifyAdminsNewVendor({
+    vendorName: parsed.data.name,
+    vendorSlug: slug,
+    contactEmail: parsed.data.contactEmail,
+    county: parsed.data.county,
+  }).catch((err) => log.error("admin notify failed", { err: String(err) }));
 
   redirect("/vendor/dashboard");
 }
@@ -414,6 +425,11 @@ export async function addVendorDocumentAction(
       status: "PENDING",
     },
   });
+  notifyAdminsKycUpload({
+    vendorName: vendor.name,
+    vendorSlug: vendor.slug,
+    docType: parsed.data.type,
+  }).catch((err) => log.error("kyc notify failed", { err: String(err) }));
   revalidatePath("/vendor/dashboard/settings");
   return { success: "Document uploaded — pending review." };
 }

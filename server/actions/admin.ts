@@ -565,3 +565,104 @@ export async function setUserRoleAction(
   revalidatePath("/admin/users");
   return { success: `Role updated to ${role}` };
 }
+
+// ─── Campaigns (promotional banners) ──────────────────────────────────────
+
+const campaignSchema = z.object({
+  title: z.string().trim().min(2).max(120),
+  message: z.string().trim().min(2).max(280),
+  ctaLabel: z
+    .string()
+    .trim()
+    .max(40)
+    .optional()
+    .transform((v) => (v ? v : null)),
+  ctaHref: z
+    .string()
+    .trim()
+    .max(500)
+    .optional()
+    .transform((v) => (v ? v : null)),
+  couponId: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ? v : null)),
+  startsAt: z.coerce.date(),
+  endsAt: z.coerce.date(),
+  isActive: z.coerce.boolean().default(false),
+  isDismissible: z.coerce.boolean().default(true),
+});
+
+export async function createCampaignAction(
+  _prev: FormResult,
+  formData: FormData,
+): Promise<FormResult> {
+  await requireRole("ADMIN", "/admin/promotions");
+  const parsed = campaignSchema.safeParse({
+    title: formData.get("title"),
+    message: formData.get("message"),
+    ctaLabel: formData.get("ctaLabel") ?? undefined,
+    ctaHref: formData.get("ctaHref") ?? undefined,
+    couponId: formData.get("couponId") ?? undefined,
+    startsAt: formData.get("startsAt"),
+    endsAt: formData.get("endsAt"),
+    isActive: formData.get("isActive") === "on",
+    isDismissible: formData.get("isDismissible") === "on",
+  });
+  if (!parsed.success) {
+    return { fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+  if (parsed.data.endsAt <= parsed.data.startsAt) {
+    return { fieldErrors: { endsAt: ["End date must be after start date"] } };
+  }
+  await db.campaign.create({ data: parsed.data });
+  revalidatePath("/admin/promotions");
+  revalidatePath("/", "layout");
+  return { success: "Campaign created" };
+}
+
+export async function updateCampaignAction(formData: FormData) {
+  await requireRole("ADMIN", "/admin/promotions");
+  const id = String(formData.get("id"));
+  if (!id) return;
+  const parsed = campaignSchema.safeParse({
+    title: formData.get("title"),
+    message: formData.get("message"),
+    ctaLabel: formData.get("ctaLabel") ?? undefined,
+    ctaHref: formData.get("ctaHref") ?? undefined,
+    couponId: formData.get("couponId") ?? undefined,
+    startsAt: formData.get("startsAt"),
+    endsAt: formData.get("endsAt"),
+    isActive: formData.get("isActive") === "on",
+    isDismissible: formData.get("isDismissible") === "on",
+  });
+  if (!parsed.success) return;
+  if (parsed.data.endsAt <= parsed.data.startsAt) return;
+  await db.campaign.update({ where: { id }, data: parsed.data });
+  revalidatePath("/admin/promotions");
+  revalidatePath("/", "layout");
+}
+
+export async function deleteCampaignAction(formData: FormData) {
+  await requireRole("ADMIN", "/admin/promotions");
+  const id = String(formData.get("id"));
+  if (!id) return;
+  await db.campaign.delete({ where: { id } });
+  revalidatePath("/admin/promotions");
+  revalidatePath("/", "layout");
+}
+
+export async function toggleCampaignAction(formData: FormData) {
+  await requireRole("ADMIN", "/admin/promotions");
+  const id = String(formData.get("id"));
+  if (!id) return;
+  const c = await db.campaign.findUnique({
+    where: { id },
+    select: { isActive: true },
+  });
+  if (!c) return;
+  await db.campaign.update({ where: { id }, data: { isActive: !c.isActive } });
+  revalidatePath("/admin/promotions");
+  revalidatePath("/", "layout");
+}

@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { ShoppingBag } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { NewsletterForm } from "./newsletter-form";
 
 const columns = [
   {
@@ -64,24 +63,7 @@ export function Footer() {
               47 counties — <span className="italic">safari yako ya ununuzi</span>.
             </p>
 
-            <form className="mt-6 flex max-w-sm gap-2">
-              <label htmlFor="newsletter-email" className="sr-only">
-                Email address
-              </label>
-              <Input
-                id="newsletter-email"
-                name="email"
-                type="email"
-                placeholder="you@example.com"
-                className="h-10"
-              />
-              <Button type="submit" className="h-10 shrink-0">
-                Subscribe
-              </Button>
-            </form>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Get weekly deals and new-vendor highlights. Unsubscribe anytime.
-            </p>
+            <NewsletterForm />
           </div>
 
           {columns.map((col) => (
