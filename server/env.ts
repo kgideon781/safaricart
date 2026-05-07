@@ -85,5 +85,13 @@ export const env = parsed.data;
 
 /** Public origin for outbound links (emails, sitemap, callbacks). */
 export function publicAppUrl(): string {
-  return env.APP_URL || env.AUTH_URL || "http://localhost:3000";
+  if (env.APP_URL) return env.APP_URL;
+  if (env.AUTH_URL) return env.AUTH_URL;
+  // Vercel auto-injects these — let first deploys work without manual config.
+  // VERCEL_PROJECT_PRODUCTION_URL is the stable prod alias; VERCEL_URL is the
+  // per-deployment URL (preview branches, etc.).
+  const vercel =
+    process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
+  if (vercel) return `https://${vercel}`;
+  return "http://localhost:3000";
 }
