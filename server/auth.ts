@@ -94,6 +94,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.role = user.role;
         token.sub = user.id;
+        return token;
+      }
+      // Refresh: re-read role from DB so role changes (vendor registration,
+      // admin promotion via /admin/users, INITIAL_ADMIN_EMAILS bootstrap) take
+      // effect without requiring sign-out. One findUnique per authed request.
+      if (token.sub) {
+        const fresh = await db.user.findUnique({
+          where: { id: token.sub },
+          select: { role: true },
+        });
+        if (fresh) token.role = fresh.role;
       }
       return token;
     },
