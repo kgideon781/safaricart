@@ -28,7 +28,7 @@ const columns = [
     links: [
       { href: "/help", label: "Help center" },
       { href: "/orders/track", label: "Track an order" },
-      { href: "/help/returns", label: "Returns & refunds" },
+      { href: "/legal/returns", label: "Returns & refunds" },
       { href: "/help/shipping", label: "Shipping & delivery" },
     ],
   },

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LayoutDashboard, Package, ShoppingCart, Store } from "lucide-react";
+import { LayoutDashboard, Package, Settings, ShoppingCart, Store } from "lucide-react";
 import { requireVendor } from "@/server/vendor";
 import { Badge } from "@/components/ui/badge";
 
@@ -7,6 +7,7 @@ const navItems = [
   { href: "/vendor/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/vendor/dashboard/products", label: "Products", icon: Package },
   { href: "/vendor/dashboard/orders", label: "Orders", icon: ShoppingCart },
+  { href: "/vendor/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
 const statusVariant: Record<

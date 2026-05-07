@@ -1,9 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getAllOrders } from "@/server/queries/admin";
-import { markOrderPaidAction } from "@/server/actions/admin";
+import {
+  markOrderPaidAction,
+  refundOrderAction,
+  cancelOrderAction,
+} from "@/server/actions/admin";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { formatKES } from "@/lib/kenya";
 import type { OrderStatus } from "@prisma/client";
 
@@ -28,9 +33,9 @@ export default async function AdminOrdersPage() {
       <div>
         <h2 className="font-heading text-2xl font-bold">Orders</h2>
         <p className="text-sm text-muted-foreground">
-          Showing the {orders.length} most recent orders. The "Mark paid"
-          action exists for testing — real payment confirmations come from
-          provider webhooks.
+          Showing the {orders.length} most recent orders. M-Pesa and Stripe
+          orders confirm via webhook; &quot;Mark paid&quot; is a manual
+          override for COD or off-platform reconciliation.
         </p>
       </div>
 
@@ -62,7 +67,7 @@ export default async function AdminOrdersPage() {
                   })}
                 </p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="font-heading font-bold text-primary">
                   {formatKES(o.totalKes)}
                 </span>
@@ -71,6 +76,45 @@ export default async function AdminOrdersPage() {
                     <input type="hidden" name="id" value={o.id} />
                     <Button type="submit" size="sm" variant="outline">
                       Mark paid
+                    </Button>
+                  </form>
+                )}
+                {(o.status === "PENDING" ||
+                  o.status === "AWAITING_PAYMENT" ||
+                  o.status === "PAID" ||
+                  o.status === "FULFILLING") && (
+                  <form action={cancelOrderAction} className="flex items-center gap-1">
+                    <input type="hidden" name="orderId" value={o.id} />
+                    <Input
+                      name="reason"
+                      placeholder="Cancel reason"
+                      className="h-8 w-36 text-xs"
+                      required
+                    />
+                    <Button type="submit" size="sm" variant="ghost">
+                      Cancel
+                    </Button>
+                  </form>
+                )}
+                {(o.status === "PAID" ||
+                  o.status === "FULFILLING" ||
+                  o.status === "SHIPPED" ||
+                  o.status === "DELIVERED") && (
+                  <form action={refundOrderAction} className="flex items-center gap-1">
+                    <input type="hidden" name="orderId" value={o.id} />
+                    <Input
+                      name="reason"
+                      placeholder="Refund reason"
+                      className="h-8 w-36 text-xs"
+                      required
+                    />
+                    <Button
+                      type="submit"
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive"
+                    >
+                      Refund
                     </Button>
                   </form>
                 )}

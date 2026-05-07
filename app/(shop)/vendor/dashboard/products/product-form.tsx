@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ImageUploader } from "@/components/uploads/image-uploader";
 import {
   createProductAction,
   updateProductAction,
@@ -39,8 +40,6 @@ export function ProductForm({ mode, categories, initial = {} }: Props) {
   const router = useRouter();
   const action = mode === "create" ? createProductAction : updateProductAction;
   const [state, formAction, pending] = useActionState(action, null);
-
-  const imagesText = (initial.images ?? []).join("\n");
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
@@ -181,28 +180,24 @@ export function ProductForm({ mode, categories, initial = {} }: Props) {
         </p>
       </div>
 
-      <div className="grid gap-2">
-        <Label htmlFor="imagesText">Image URLs (one per line, max 8)</Label>
-        <textarea
-          id="imagesText"
-          name="imagesText"
-          rows={4}
-          defaultValue={imagesText}
-          placeholder={"https://example.com/photo.jpg\nhttps://example.com/photo2.jpg"}
-          className={`${inputClass} h-auto py-2 font-mono text-xs`}
-          disabled={pending}
-        />
-        <p className="text-xs text-muted-foreground">
-          Image hosting integration is coming soon. For now, paste public URLs.
-          The first URL is used as the primary image.
-        </p>
-      </div>
+      <ImageUploader
+        name="images"
+        folder="products"
+        initialUrls={initial.images ?? []}
+        max={8}
+        label="Photos"
+      />
+      {state?.fieldErrors?.images && (
+        <p className="text-xs text-destructive">{state.fieldErrors.images[0]}</p>
+      )}
 
       <label className="flex items-center gap-2 text-sm">
         <input
           type="checkbox"
           name="isPublished"
-          defaultChecked={initial.isPublished ?? false}
+          // Default new products to published — the common case is "create
+          // and list it"; saving as a draft is the exception.
+          defaultChecked={initial.isPublished ?? mode === "create"}
           className="size-4 rounded border-input"
           disabled={pending}
         />

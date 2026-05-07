@@ -9,7 +9,10 @@ import { requireSession } from "@/server/auth";
 import { requireVendor } from "@/server/vendor";
 import { KENYAN_COUNTIES, normalizeKenyanPhone } from "@/lib/kenya";
 import { slugify } from "@/lib/text";
+import { creditVendorsForOrder } from "@/server/payouts";
+import { vendorPayableKes } from "@/server/payouts";
 import type { FormResult } from "@/server/actions/account";
+import type { VendorDocumentType } from "@prisma/client";
 
 // ─── Vendor registration ──────────────────────────────────────────────────
 
@@ -115,21 +118,28 @@ const productSchema = z.object({
       z.coerce.number().int().positive().nullable(),
     )
     .optional(),
-  imagesText: z.string().max(5000).default(""),
+  images: z
+    .preprocess(
+      (v) => {
+        if (typeof v !== "string" || v.trim() === "") return [];
+        try {
+          const parsed = JSON.parse(v);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      },
+      z
+        .array(z.string().url())
+        .max(8, "Up to 8 images")
+        .default([]),
+    )
+    .default([]),
   isPublished: z
     .union([z.literal("on"), z.literal("true"), z.string()])
     .optional()
     .transform((v) => v === "on" || v === "true"),
 });
-
-function parseImagesText(input: string): string[] {
-  return input
-    .split(/\r?\n/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .filter((s) => /^https?:\/\//i.test(s))
-    .slice(0, 8);
-}
 
 export async function createProductAction(
   _prev: FormResult,
@@ -145,7 +155,7 @@ export async function createProductAction(
     compareAtPriceKes: formData.get("compareAtPriceKes"),
     stock: formData.get("stock") ?? "0",
     weightGrams: formData.get("weightGrams"),
-    imagesText: formData.get("imagesText") ?? "",
+    images: formData.get("images") ?? "",
     isPublished: formData.get("isPublished") ?? undefined,
   });
   if (!parsed.success) {
@@ -163,8 +173,6 @@ export async function createProductAction(
     }
   }
 
-  const images = parseImagesText(parsed.data.imagesText);
-
   await db.product.create({
     data: {
       slug,
@@ -176,7 +184,7 @@ export async function createProductAction(
       compareAtPriceKes: parsed.data.compareAtPriceKes ?? null,
       stock: parsed.data.stock,
       weightGrams: parsed.data.weightGrams ?? null,
-      images,
+      images: parsed.data.images,
       isPublished: parsed.data.isPublished,
     },
   });
@@ -208,14 +216,12 @@ export async function updateProductAction(
     compareAtPriceKes: formData.get("compareAtPriceKes"),
     stock: formData.get("stock") ?? "0",
     weightGrams: formData.get("weightGrams"),
-    imagesText: formData.get("imagesText") ?? "",
+    images: formData.get("images") ?? "",
     isPublished: formData.get("isPublished") ?? undefined,
   });
   if (!parsed.success) {
     return { fieldErrors: parsed.error.flatten().fieldErrors };
   }
-
-  const images = parseImagesText(parsed.data.imagesText);
 
   await db.product.update({
     where: { id: productId },
@@ -227,7 +233,7 @@ export async function updateProductAction(
       compareAtPriceKes: parsed.data.compareAtPriceKes ?? null,
       stock: parsed.data.stock,
       weightGrams: parsed.data.weightGrams ?? null,
-      images,
+      images: parsed.data.images,
       isPublished: parsed.data.isPublished,
     },
   });
@@ -253,6 +259,176 @@ export async function deleteProductAction(formData: FormData) {
     await db.product.deleteMany({ where: { id, vendorId: vendor.id } });
   }
   revalidatePath("/vendor/dashboard/products");
+}
+
+// ─── Vendor profile settings ──────────────────────────────────────────────
+
+const profileSchema = z.object({
+  description: z
+    .string()
+    .trim()
+    .max(2000)
+    .optional()
+    .transform((v) => (v === "" ? null : v)),
+  contactEmail: z.string().email("Enter a valid email"),
+  contactPhone: z.string().trim().min(1, "Phone number is required"),
+  county: z.string().refine((v) => (KENYAN_COUNTIES as readonly string[]).includes(v), {
+    message: "Pick a valid Kenyan county",
+  }),
+  logoUrl: z
+    .string()
+    .url()
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => (v === "" ? null : v ?? null)),
+  coverUrl: z
+    .string()
+    .url()
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => (v === "" ? null : v ?? null)),
+  mpesaPaybill: z
+    .string()
+    .trim()
+    .max(20)
+    .optional()
+    .transform((v) => (v === "" ? null : v ?? null)),
+  mpesaTillNumber: z
+    .string()
+    .trim()
+    .max(20)
+    .optional()
+    .transform((v) => (v === "" ? null : v ?? null)),
+  bankName: z
+    .string()
+    .trim()
+    .max(100)
+    .optional()
+    .transform((v) => (v === "" ? null : v ?? null)),
+  bankAccountName: z
+    .string()
+    .trim()
+    .max(100)
+    .optional()
+    .transform((v) => (v === "" ? null : v ?? null)),
+  bankAccountNumber: z
+    .string()
+    .trim()
+    .max(50)
+    .optional()
+    .transform((v) => (v === "" ? null : v ?? null)),
+  kraPin: z
+    .string()
+    .trim()
+    .max(20)
+    .optional()
+    .transform((v) => (v === "" ? null : v ?? null)),
+});
+
+export async function updateVendorProfileAction(
+  _prev: FormResult,
+  formData: FormData,
+): Promise<FormResult> {
+  const { vendor } = await requireVendor("/vendor/dashboard/settings");
+
+  const parsed = profileSchema.safeParse({
+    description: formData.get("description") ?? undefined,
+    contactEmail: formData.get("contactEmail"),
+    contactPhone: formData.get("contactPhone"),
+    county: formData.get("county"),
+    logoUrl: formData.get("logoUrl") ?? undefined,
+    coverUrl: formData.get("coverUrl") ?? undefined,
+    mpesaPaybill: formData.get("mpesaPaybill") ?? undefined,
+    mpesaTillNumber: formData.get("mpesaTillNumber") ?? undefined,
+    bankName: formData.get("bankName") ?? undefined,
+    bankAccountName: formData.get("bankAccountName") ?? undefined,
+    bankAccountNumber: formData.get("bankAccountNumber") ?? undefined,
+    kraPin: formData.get("kraPin") ?? undefined,
+  });
+  if (!parsed.success) {
+    return { fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+
+  const phone = normalizeKenyanPhone(parsed.data.contactPhone);
+  if (!phone) {
+    return {
+      fieldErrors: { contactPhone: ["Enter a valid Kenyan mobile number"] },
+    };
+  }
+
+  await db.vendor.update({
+    where: { id: vendor.id },
+    data: {
+      description: parsed.data.description,
+      contactEmail: parsed.data.contactEmail,
+      contactPhone: phone,
+      county: parsed.data.county,
+      logoUrl: parsed.data.logoUrl,
+      coverUrl: parsed.data.coverUrl,
+      mpesaPaybill: parsed.data.mpesaPaybill,
+      mpesaTillNumber: parsed.data.mpesaTillNumber,
+      bankName: parsed.data.bankName,
+      bankAccountName: parsed.data.bankAccountName,
+      bankAccountNumber: parsed.data.bankAccountNumber,
+      kraPin: parsed.data.kraPin,
+    },
+  });
+
+  revalidatePath("/vendor/dashboard/settings");
+  revalidatePath(`/vendor/${vendor.slug}`);
+  return { success: "Settings saved." };
+}
+
+// ─── Vendor KYC documents ─────────────────────────────────────────────────
+
+const VENDOR_DOC_TYPES = [
+  "NATIONAL_ID",
+  "BUSINESS_CERTIFICATE",
+  "KRA_PIN_CERTIFICATE",
+  "BANK_STATEMENT",
+  "OTHER",
+] as const satisfies readonly VendorDocumentType[];
+
+const docUploadSchema = z.object({
+  type: z.enum(VENDOR_DOC_TYPES),
+  fileUrl: z.string().url("Upload a file first"),
+});
+
+export async function addVendorDocumentAction(
+  _prev: FormResult,
+  formData: FormData,
+): Promise<FormResult> {
+  const { vendor } = await requireVendor("/vendor/dashboard/settings");
+  const parsed = docUploadSchema.safeParse({
+    type: formData.get("type"),
+    fileUrl: formData.get("fileUrl"),
+  });
+  if (!parsed.success) {
+    return { fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+  await db.vendorDocument.create({
+    data: {
+      vendorId: vendor.id,
+      type: parsed.data.type,
+      fileUrl: parsed.data.fileUrl,
+      status: "PENDING",
+    },
+  });
+  revalidatePath("/vendor/dashboard/settings");
+  return { success: "Document uploaded — pending review." };
+}
+
+export async function deleteVendorDocumentAction(formData: FormData) {
+  const { vendor } = await requireVendor();
+  const id = String(formData.get("id"));
+  if (!id) return;
+  await db.vendorDocument.deleteMany({ where: { id, vendorId: vendor.id } });
+  revalidatePath("/vendor/dashboard/settings");
+}
+
+// Read-only summary used by the dashboard.
+export async function getVendorPayableKes(vendorId: string): Promise<number> {
+  return vendorPayableKes(vendorId);
 }
 
 // ─── Order item fulfillment ───────────────────────────────────────────────
@@ -282,5 +458,23 @@ export async function updateOrderItemStatusAction(formData: FormData) {
     where: { id: parsed.data.orderItemId, vendorId: vendor.id },
     data: { fulfillmentStatus: parsed.data.status },
   });
+
+  // For COD orders the vendor isn't credited at payment time — credit on
+  // delivery. `creditVendorsForOrder` is idempotent so it's safe even for
+  // prepaid orders that were already credited at PAID.
+  if (parsed.data.status === "DELIVERED") {
+    const item = await db.orderItem.findUnique({
+      where: { id: parsed.data.orderItemId },
+      select: { orderId: true },
+    });
+    if (item) {
+      try {
+        await creditVendorsForOrder(item.orderId);
+      } catch (err) {
+        console.error("ledger credit failed", err);
+      }
+    }
+  }
+
   revalidatePath("/vendor/dashboard/orders");
 }

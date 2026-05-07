@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { getCategoryBySlug, getProductsByCategory } from "@/server/queries/catalog";
 import { ProductGrid } from "@/components/product/product-grid";
 import { Pagination } from "@/components/layout/pagination";
+import { publicAppUrl } from "@/server/env";
 
 const PER_PAGE = 24;
 
@@ -17,9 +18,20 @@ export async function generateMetadata({
   const { slug } = await params;
   const category = await getCategoryBySlug(slug);
   if (!category) return { title: "Category not found" };
+  const url = `${publicAppUrl().replace(/\/$/, "")}/category/${category.slug}`;
+  const description =
+    category.description ?? `Shop ${category.name} on SafariCart — Kenya's online marketplace.`;
   return {
     title: category.name,
-    description: category.description ?? `Shop ${category.name} on SafariCart.`,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      type: "website",
+      title: category.name,
+      description,
+      url,
+      siteName: "SafariCart",
+    },
   };
 }
 
@@ -39,8 +51,28 @@ export default async function CategoryPage({
   const page = Math.max(1, Number(pageParam) || 1);
   const result = await getProductsByCategory(slug, { page, perPage: PER_PAGE });
 
+  const baseUrl = publicAppUrl().replace(/\/$/, "");
+  const breadcrumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${baseUrl}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: category.name,
+        item: `${baseUrl}/category/${category.slug}`,
+      },
+    ],
+  };
+
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-8 md:px-6 md:py-12">
+      <script
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+      />
       <div className="mb-6">
         <h1 className="font-heading text-3xl font-bold tracking-tight md:text-4xl">
           {category.name}

@@ -10,6 +10,7 @@ import { AddToCartForm } from "@/components/product/add-to-cart-form";
 import { getProductBySlug } from "@/server/queries/catalog";
 import { addToCartAndCheckoutAction } from "@/server/actions/cart";
 import { formatKES } from "@/lib/kenya";
+import { publicAppUrl } from "@/server/env";
 
 type RouteParams = Promise<{ slug: string }>;
 
@@ -21,9 +22,27 @@ export async function generateMetadata({
   const { slug } = await params;
   const product = await getProductBySlug(slug);
   if (!product) return { title: "Product not found" };
+  const description = product.description.slice(0, 200);
+  const url = `${publicAppUrl().replace(/\/$/, "")}/product/${product.slug}`;
+  const images = product.images.length > 0 ? product.images.slice(0, 4) : undefined;
   return {
     title: product.title,
-    description: product.description.slice(0, 150),
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      type: "website",
+      title: product.title,
+      description,
+      url,
+      siteName: "SafariCart",
+      images: images?.map((u) => ({ url: u, alt: product.title })),
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: product.title,
+      description,
+      images,
+    },
   };
 }
 
@@ -48,9 +67,70 @@ export default async function ProductPage({
     : 0;
   const inStock = product.stock > 0;
   const primaryImage = product.images[0];
+  const productUrl = `${publicAppUrl().replace(/\/$/, "")}/product/${product.slug}`;
+
+  const baseUrl = publicAppUrl().replace(/\/$/, "");
+
+  // schema.org Product JSON-LD — helps Google show price, stock, ratings.
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.title,
+    description: product.description,
+    image: product.images,
+    sku: product.id,
+    brand: { "@type": "Brand", name: product.vendor.name },
+    offers: {
+      "@type": "Offer",
+      url: productUrl,
+      priceCurrency: "KES",
+      price: product.priceKes,
+      availability: inStock
+        ? "https://schema.org/InStock"
+        : "https://schema.org/OutOfStock",
+      seller: { "@type": "Organization", name: product.vendor.name },
+    },
+    ...(product.reviewCount > 0 && {
+      aggregateRating: {
+        "@type": "AggregateRating",
+        ratingValue: product.rating,
+        reviewCount: product.reviewCount,
+      },
+    }),
+  };
+
+  const breadcrumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${baseUrl}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: product.category.name,
+        item: `${baseUrl}/category/${product.category.slug}`,
+      },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: product.title,
+        item: productUrl,
+      },
+    ],
+  };
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-8 md:px-6 md:py-12">
+      <script
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+      />
       <nav
         aria-label="Breadcrumb"
         className="mb-6 flex items-center gap-2 text-sm text-muted-foreground"

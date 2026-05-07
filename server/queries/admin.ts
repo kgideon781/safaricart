@@ -45,13 +45,27 @@ export async function getAllUsers() {
 }
 
 export async function getAllVendors() {
-  return db.vendor.findMany({
+  const vendors = await db.vendor.findMany({
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     include: {
       user: { select: { email: true } },
       _count: { select: { products: true } },
+      documents: {
+        select: { id: true, type: true, status: true, fileUrl: true, notes: true },
+      },
     },
   });
+  // Add unsettled balance for each vendor.
+  const balances = await db.vendorLedgerEntry.groupBy({
+    by: ["vendorId"],
+    where: { payoutId: null, type: { in: ["SALE_CREDIT", "REFUND_DEBIT", "ADJUSTMENT"] } },
+    _sum: { amountKes: true },
+  });
+  const balanceByVendor = new Map(balances.map((b) => [b.vendorId, b._sum.amountKes ?? 0]));
+  return vendors.map((v) => ({
+    ...v,
+    payableKes: balanceByVendor.get(v.id) ?? 0,
+  }));
 }
 
 export async function getAllProducts() {

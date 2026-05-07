@@ -1,7 +1,10 @@
 import Link from "next/link";
 import {
+  Flag,
+  KeyRound,
   LayoutDashboard,
   Package,
+  Percent,
   ShieldCheck,
   ShoppingCart,
   Tag,
@@ -16,6 +19,9 @@ const navItems = [
   { href: "/admin/products", label: "Products", icon: Package },
   { href: "/admin/orders", label: "Orders", icon: ShoppingCart },
   { href: "/admin/categories", label: "Categories", icon: Tag },
+  { href: "/admin/coupons", label: "Coupons", icon: Percent },
+  { href: "/admin/reviews", label: "Reviews", icon: Flag },
+  { href: "/admin/integrations", label: "Integrations", icon: KeyRound },
 ];
 
 export default async function AdminLayout({

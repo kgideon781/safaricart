@@ -222,6 +222,29 @@ export function CheckoutForm({
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-heading text-xl">Promo code</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Label htmlFor="couponCode" className="sr-only">
+            Coupon code
+          </Label>
+          <Input
+            id="couponCode"
+            name="couponCode"
+            placeholder="Enter a code (optional)"
+            autoCapitalize="characters"
+            className="uppercase"
+          />
+          {state?.fieldErrors?.couponCode && (
+            <p className="mt-2 text-xs text-destructive">
+              {state.fieldErrors.couponCode[0]}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       <Button type="submit" size="lg" disabled={pending} className="w-full">
         {pending ? "Placing order…" : "Place order"}
       </Button>

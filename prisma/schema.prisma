@@ -15,8 +15,11 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Migrations need a non-pooled connection (PgBouncer breaks prepared statements).
+  // Falls back to DATABASE_URL when DIRECT_URL is unset (local dev).
+  directUrl = env("DIRECT_URL")
 }
 
 // ────────────────────────────────────────────────────────────
@@ -35,13 +38,14 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  accounts  Account[]
-  sessions  Session[]
-  vendor    Vendor?
-  addresses Address[]
-  orders    Order[]
-  cart      Cart?
-  reviews   Review[]
+  accounts          Account[]
+  sessions          Session[]
+  vendor            Vendor?
+  addresses         Address[]
+  orders            Order[]
+  cart              Cart?
+  reviews           Review[]
+  couponRedemptions CouponRedemption[]
 }
 
 enum UserRole {
@@ -82,12 +86,56 @@ model Session {
   @@index([userId])
 }
 
+// Used by Auth.js for email magic links AND by us for email verification +
+// password reset. `identifier` is the email; `token` is a 32-byte random
+// hex string. We store the SHA-256 hash, never the raw token.
 model VerificationToken {
   identifier String
   token      String   @unique
   expires    DateTime
+  // Discriminator so a single table covers both flows. `purpose` is null for
+  // Auth.js email-magic-link tokens (which we don't use today) and explicit
+  // for our flows: "EMAIL_VERIFICATION" | "PASSWORD_RESET".
+  purpose    String?
 
   @@unique([identifier, token])
+}
+
+// Runtime-configurable integrations (M-Pesa, Stripe, Paystack, SMTP,
+// Cloudinary, ...). Lets an admin paste credentials and flip a switch
+// without redeploying. Resolution order at runtime is DB-first; env vars
+// remain as fallbacks for bootstrap.
+//
+//   • `publicConfig` holds non-secret values (shortcodes, hostnames, sender
+//     emails, public keys, etc.) as a JSON object.
+//   • `secretsCipher` holds an AES-256-GCM ciphertext blob — a single JSON
+//     object encrypted with SETTINGS_ENCRYPTION_KEY. Never stored in plain
+//     text. Format: base64(iv) + ":" + base64(ciphertext) + ":" + base64(tag).
+//   • `enabled` decides whether the resolver uses DB values or falls back
+//     to env. Toggle at /admin/integrations.
+//   • `testMode` is a hint to the integration (e.g. M-Pesa sandbox/prod).
+model Integration {
+  scope         String   @id // "mpesa" | "stripe" | "paystack" | "smtp" | "cloudinary"
+  enabled       Boolean  @default(false)
+  testMode      Boolean  @default(true)
+  publicConfig  Json     @default("{}")
+  secretsCipher String?
+  updatedAt     DateTime @updatedAt
+  updatedBy     String?
+  createdAt     DateTime @default(now())
+}
+
+// Generic IP/email-based rate limiter. One row per (key, window) bucket.
+model RateLimit {
+  id        String   @id @default(cuid())
+  key       String // e.g. "login:ip:1.2.3.4" or "register:email:foo@bar"
+  windowAt  DateTime // start of the current window (truncated)
+  hits      Int      @default(1)
+  expiresAt DateTime // for cleanup
+  createdAt DateTime @default(now())
+
+  @@unique([key, windowAt])
+  @@index([expiresAt])
 }
 
 // ────────────────────────────────────────────────────────────
@@ -116,6 +164,9 @@ model Vendor {
   bankAccountName   String?
   bankAccountNumber String?
 
+  // KRA tax PIN (Kenya), used on payouts
+  kraPin String?
+
   // Platform commission in basis points (10000 = 100%, 1000 = 10%).
   // Stored per-vendor to allow case-by-case negotiation.
   commissionBps Int @default(1000)
@@ -123,9 +174,13 @@ model Vendor {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  products   Product[]
-  orderItems OrderItem[]
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  products      Product[]
+  orderItems    OrderItem[]
+  documents     VendorDocument[]
+  ledgerEntries VendorLedgerEntry[]
+  payouts       VendorPayout[]
+  coupons       Coupon[]
 
   @@index([status])
 }
@@ -134,6 +189,38 @@ enum VendorStatus {
   PENDING
   APPROVED
   SUSPENDED
+}
+
+// KYC: each vendor uploads identity / business / tax documents for review.
+model VendorDocument {
+  id           String               @id @default(cuid())
+  vendorId     String
+  type         VendorDocumentType
+  fileUrl      String // Cloudinary secure URL
+  filePublicId String? // Cloudinary public ID for deletion
+  status       VendorDocumentStatus @default(PENDING)
+  notes        String? // admin reviewer notes
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
+  @@index([status])
+}
+
+enum VendorDocumentType {
+  NATIONAL_ID
+  BUSINESS_CERTIFICATE
+  KRA_PIN_CERTIFICATE
+  BANK_STATEMENT
+  OTHER
+}
+
+enum VendorDocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 // ────────────────────────────────────────────────────────────
@@ -243,6 +330,59 @@ model CartItem {
 }
 
 // ────────────────────────────────────────────────────────────
+// Coupons
+// ────────────────────────────────────────────────────────────
+
+model Coupon {
+  id             String     @id @default(cuid())
+  code           String     @unique // uppercase, e.g. "JAMHURI10"
+  type           CouponType
+  // For PERCENT: 1000 = 10.00% (basis points). For FIXED: KES integer.
+  value          Int
+  minSubtotalKes Int        @default(0)
+  // Optional cap on percent discounts
+  maxDiscountKes Int?
+  // Optional vendor scope — if set, only applies to that vendor's items.
+  vendorId       String?
+  // Total uses across all customers; null = unlimited
+  maxUses        Int?
+  // Per-customer usage cap; null = unlimited
+  perUserLimit   Int?
+  startsAt       DateTime?
+  expiresAt      DateTime?
+  isActive       Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  vendor      Vendor?            @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  redemptions CouponRedemption[]
+  orders      Order[]
+
+  @@index([isActive, expiresAt])
+}
+
+enum CouponType {
+  PERCENT
+  FIXED
+}
+
+model CouponRedemption {
+  id         String   @id @default(cuid())
+  couponId   String
+  userId     String
+  orderId    String   @unique
+  amountKes  Int
+  redeemedAt DateTime @default(now())
+
+  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([couponId])
+  @@index([userId])
+}
+
+// ────────────────────────────────────────────────────────────
 // Orders
 // Address and product details are SNAPSHOTTED at order time so historical
 // orders remain accurate even if the product or address is later edited.
@@ -257,7 +397,12 @@ model Order {
   // Money (KES)
   subtotalKes    Int
   shippingFeeKes Int @default(0)
+  discountKes    Int @default(0)
   totalKes       Int
+
+  // Coupon (snapshot)
+  couponId   String?
+  couponCode String?
 
   // Shipping address snapshot
   shippingRecipientName  String
@@ -269,17 +414,28 @@ model Order {
 
   // Payment
   paymentMethod    PaymentMethod
-  paymentReference String? // gateway-specific transaction ID
+  paymentReference String? // gateway-specific transaction ID (Stripe session id, M-Pesa CheckoutRequestID, etc.)
   paidAt           DateTime?
+
+  // Cancellation / refund
+  cancelledAt  DateTime?
+  cancelReason String?
+  refundedAt   DateTime?
+  refundedKes  Int?
+  refundReason String?
 
   placedAt  DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user  User        @relation(fields: [userId], references: [id])
-  items OrderItem[]
+  user              User               @relation(fields: [userId], references: [id])
+  items             OrderItem[]
+  coupon            Coupon?            @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  couponRedemption  CouponRedemption?
+  mpesaTransactions MpesaTransaction[]
 
   @@index([userId, placedAt])
   @@index([status, placedAt])
+  @@index([paymentReference])
 }
 
 enum OrderStatus {
@@ -324,6 +480,8 @@ model OrderItem {
   product Product @relation(fields: [productId], references: [id])
   vendor  Vendor  @relation(fields: [vendorId], references: [id])
 
+  ledgerEntries VendorLedgerEntry[]
+
   @@index([orderId])
   @@index([vendorId, fulfillmentStatus])
   @@index([productId])
@@ -337,19 +495,53 @@ enum OrderItemFulfillmentStatus {
   CANCELLED
 }
 
+// One row per Daraja STK push attempt + each callback we receive.
+// Callbacks are idempotent on (checkoutRequestId, resultCode).
+model MpesaTransaction {
+  id                 String                 @id @default(cuid())
+  orderId            String
+  merchantRequestId  String?
+  checkoutRequestId  String                 @unique
+  amountKes          Int
+  phoneE164          String
+  status             MpesaTransactionStatus @default(PENDING)
+  resultCode         Int?
+  resultDesc         String?
+  mpesaReceiptNumber String?
+  transactionDate    DateTime?
+  rawCallback        Json?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([status])
+}
+
+enum MpesaTransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
 // ────────────────────────────────────────────────────────────
 // Reviews
 // ────────────────────────────────────────────────────────────
 
 model Review {
-  id        String   @id @default(cuid())
-  productId String
-  userId    String
-  rating    Int // 1–5; validate at app layer with Zod
-  title     String?
-  body      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  productId  String
+  userId     String
+  rating     Int // 1–5; validate at app layer with Zod
+  title      String?
+  body       String
+  // Moderation
+  isFlagged  Boolean  @default(false)
+  isHidden   Boolean  @default(false)
+  flagReason String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -357,4 +549,73 @@ model Review {
   @@unique([productId, userId]) // one review per user per product
   @@index([productId])
   @@index([userId])
+  @@index([isFlagged, isHidden])
+}
+
+// ────────────────────────────────────────────────────────────
+// Vendor payout ledger
+// ────────────────────────────────────────────────────────────
+//
+// One credit entry is created per OrderItem when its fulfillment reaches
+// DELIVERED (vendor has earned). Refunds create a debit (negative) entry.
+// Payouts group entries together — when the admin disburses, we mark them
+// settled and link to a VendorPayout row.
+
+model VendorLedgerEntry {
+  id          String          @id @default(cuid())
+  vendorId    String
+  // Item that earned this entry; null for manual adjustments.
+  orderItemId String?
+  type        LedgerEntryType
+  // Positive (CREDIT/REFUND_REVERSAL) or negative (REFUND/ADJUSTMENT) integer KES
+  amountKes   Int
+  description String?
+  payoutId    String?
+  createdAt   DateTime        @default(now())
+
+  vendor    Vendor        @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  orderItem OrderItem?    @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  payout    VendorPayout? @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+
+  @@index([vendorId, createdAt])
+  @@index([payoutId])
+}
+
+enum LedgerEntryType {
+  SALE_CREDIT // vendor share of a delivered item
+  COMMISSION_DEBIT // platform commission deducted (recorded separately for clarity)
+  REFUND_DEBIT // customer was refunded; vendor portion reversed
+  ADJUSTMENT // manual admin adjustment
+}
+
+model VendorPayout {
+  id               String       @id @default(cuid())
+  vendorId         String
+  amountKes        Int
+  status           PayoutStatus @default(PENDING)
+  method           PayoutMethod
+  // Snapshot of where money was sent
+  destinationLabel String // e.g. "M-Pesa Paybill 522522 — acct 123" or "KCB ****1234"
+  notes            String?
+  initiatedAt      DateTime     @default(now())
+  settledAt        DateTime?
+  reference        String? // bank/M-Pesa transaction reference
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  vendor  Vendor              @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  entries VendorLedgerEntry[]
+
+  @@index([vendorId, status])
+}
+
+enum PayoutStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+enum PayoutMethod {
+  MPESA
+  BANK
 }

@@ -8,6 +8,8 @@ import { db } from "@/server/db";
 import { requireSession } from "@/server/auth";
 import { getCart } from "@/server/cart";
 import { initiatePayment } from "@/server/payments";
+import { sendOrderConfirmationEmails } from "@/server/email/orders";
+import { evaluateCoupon } from "@/server/coupons";
 import { normalizeKenyanPhone } from "@/lib/kenya";
 import type { FormResult } from "@/server/actions/account";
 
@@ -25,6 +27,10 @@ const checkoutSchema = z.object({
     .string()
     .optional()
     .transform((v) => (v && v.trim() !== "" ? v : undefined)),
+  couponCode: z
+    .string()
+    .optional()
+    .transform((v) => (v && v.trim() !== "" ? v.trim() : undefined)),
 });
 
 function generateOrderNumber(): string {
@@ -46,6 +52,7 @@ export async function placeOrderAction(
     addressId: formData.get("addressId"),
     paymentMethod: formData.get("paymentMethod"),
     mpesaPhone: formData.get("mpesaPhone") ?? undefined,
+    couponCode: formData.get("couponCode") ?? undefined,
   });
   if (!parsed.success) {
     return { fieldErrors: parsed.error.flatten().fieldErrors };
@@ -87,7 +94,32 @@ export async function placeOrderAction(
 
   const subtotalKes = cart.subtotalKes;
   const shippingFeeKes = subtotalKes >= 5000 ? 0 : 350;
-  const totalKes = subtotalKes + shippingFeeKes;
+
+  // Evaluate coupon (optional)
+  let discountKes = 0;
+  let couponId: string | null = null;
+  let couponCode: string | null = null;
+  if (parsed.data.couponCode) {
+    const perVendorSubtotalKes: Record<string, number> = {};
+    for (const it of cart.items) {
+      perVendorSubtotalKes[it.vendorId] =
+        (perVendorSubtotalKes[it.vendorId] ?? 0) + it.priceKes * it.quantity;
+    }
+    const evaluation = await evaluateCoupon({
+      code: parsed.data.couponCode,
+      userId: session.user.id,
+      subtotalKes,
+      perVendorSubtotalKes,
+    });
+    if (!evaluation.ok) {
+      return { fieldErrors: { couponCode: [evaluation.reason] } };
+    }
+    discountKes = evaluation.discountKes;
+    couponId = evaluation.coupon.id;
+    couponCode = evaluation.coupon.code;
+  }
+
+  const totalKes = Math.max(0, subtotalKes + shippingFeeKes - discountKes);
 
   // Pre-generate a unique order number (retry on collision)
   let orderNumber = generateOrderNumber();
@@ -122,7 +154,10 @@ export async function placeOrderAction(
           status: initialOrderStatus,
           subtotalKes,
           shippingFeeKes,
+          discountKes,
           totalKes,
+          couponId,
+          couponCode,
           shippingRecipientName: address.recipientName,
           shippingRecipientPhone: address.recipientPhone,
           shippingCounty: address.county,
@@ -132,6 +167,17 @@ export async function placeOrderAction(
           paymentMethod: parsed.data.paymentMethod,
         },
       });
+
+      if (couponId) {
+        await tx.couponRedemption.create({
+          data: {
+            couponId,
+            userId: session.user.id,
+            orderId: created.id,
+            amountKes: discountKes,
+          },
+        });
+      }
 
       for (const item of cart.items) {
         const product = byId.get(item.productId);
@@ -168,24 +214,52 @@ export async function placeOrderAction(
     return { error: "Could not place your order. Please try again." };
   }
 
-  // Initiate payment (stub for now — real providers behind .env flags).
   const payment = await initiatePayment({
     method: parsed.data.paymentMethod,
+    orderId: order.id,
     orderNumber: order.orderNumber,
     amountKes: order.totalKes,
     email: session.user.email ?? "",
     phoneE164: mpesaPhoneE164,
   });
 
-  if (payment.ok) {
-    await db.order.update({
-      where: { id: order.id },
-      data: { paymentReference: payment.reference },
+  if (!payment.ok) {
+    // Payment provider rejected — cancel the order so stock is freed.
+    await db.$transaction(async (tx) => {
+      const items = await tx.orderItem.findMany({
+        where: { orderId: order.id },
+        select: { productId: true, quantity: true },
+      });
+      for (const it of items) {
+        await tx.product.update({
+          where: { id: it.productId },
+          data: { stock: { increment: it.quantity } },
+        });
+      }
+      await tx.order.update({
+        where: { id: order.id },
+        data: { status: "CANCELLED", cancelReason: payment.reason },
+      });
     });
-    if (payment.redirectUrl) {
-      // Card-redirect providers (Paystack/Stripe) hand off to a hosted page
-      redirect(payment.redirectUrl);
-    }
+    return { error: payment.reason };
+  }
+
+  await db.order.update({
+    where: { id: order.id },
+    data: { paymentReference: payment.reference },
+  });
+
+  if (payment.redirectUrl) {
+    // Stripe / Paystack hosted page
+    redirect(payment.redirectUrl);
+  }
+
+  // COD has no asynchronous payment confirmation — send the customer + vendor
+  // emails right away. M-Pesa & Stripe wait for their webhooks.
+  if (parsed.data.paymentMethod === "CASH_ON_DELIVERY") {
+    sendOrderConfirmationEmails(order.id).catch(() => {
+      /* logged inside */
+    });
   }
 
   revalidatePath("/", "layout");

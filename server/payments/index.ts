@@ -6,6 +6,7 @@ import { createStripeCheckoutSession } from "./stripe";
 
 export type PaymentInitOptions = {
   method: PaymentMethod;
+  orderId: string;
   orderNumber: string;
   amountKes: number;
   email: string;
@@ -26,13 +27,19 @@ export async function initiatePayment(
   switch (opts.method) {
     case "CASH_ON_DELIVERY":
       return { ok: true, reference: `COD-${opts.orderNumber}`, redirectUrl: null };
-    case "MPESA":
-      if (!opts.phoneE164) return { ok: false, reason: "Phone number is required for M-Pesa" };
-      return (await initiateMpesaStkPush({
+    case "MPESA": {
+      if (!opts.phoneE164) {
+        return { ok: false, reason: "Phone number is required for M-Pesa" };
+      }
+      const result = await initiateMpesaStkPush({
+        orderId: opts.orderId,
         orderNumber: opts.orderNumber,
         amountKes: opts.amountKes,
         phoneE164: opts.phoneE164,
-      })) as PaymentInitResult;
+      });
+      if (!result.ok) return result;
+      return { ok: true, reference: result.reference, redirectUrl: null };
+    }
     case "PAYSTACK":
       return initiatePaystackTransaction({
         orderNumber: opts.orderNumber,
@@ -41,8 +48,10 @@ export async function initiatePayment(
       });
     case "STRIPE":
       return createStripeCheckoutSession({
+        orderId: opts.orderId,
         orderNumber: opts.orderNumber,
         amountKes: opts.amountKes,
+        email: opts.email,
       });
   }
 }

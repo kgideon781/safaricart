@@ -24,8 +24,11 @@ export type CartItemView = {
   title: string;
   image: string | null;
   unitPriceKes: number;
+  /** Alias of unitPriceKes — convenience for callers that compute per-vendor totals. */
+  priceKes: number;
   quantity: number;
   stock: number;
+  vendorId: string;
   vendorName: string;
   lineTotalKes: number;
 };
@@ -104,8 +107,10 @@ async function hydrate(items: RawCartItem[]): Promise<CartItemView[]> {
         title: p.title,
         image: p.images[0] ?? null,
         unitPriceKes: p.priceKes,
+        priceKes: p.priceKes,
         quantity: i.quantity,
         stock: p.stock,
+        vendorId: p.vendorId,
         vendorName: p.vendor.name,
         lineTotalKes: p.priceKes * i.quantity,
       };
