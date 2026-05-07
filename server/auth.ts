@@ -10,7 +10,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { UserRole } from "@prisma/client";
 import { db } from "@/server/db";
-import { env } from "@/server/env";
+import { env, initialAdminEmails } from "@/server/env";
 import { maybeMergeGuestCartIntoDb } from "@/server/cart";
 
 const credentialsSchema = z.object({
@@ -112,6 +112,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           await maybeMergeGuestCartIntoDb(user.id);
         } catch (error) {
           console.error("Failed to merge guest cart on sign-in:", error);
+        }
+        // Promote bootstrap emails to ADMIN on every sign-in (idempotent).
+        // Removing the email from INITIAL_ADMIN_EMAILS stops re-promotion;
+        // existing ADMIN status is unaffected (no demotion here).
+        const bootstrapAdmins = initialAdminEmails();
+        const email = user.email?.toLowerCase();
+        if (email && bootstrapAdmins.has(email)) {
+          try {
+            await db.user.update({
+              where: { id: user.id },
+              data: { role: "ADMIN" },
+            });
+          } catch (error) {
+            console.error("Failed to promote bootstrap admin:", error);
+          }
         }
       }
     },

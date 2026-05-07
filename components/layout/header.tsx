@@ -1,6 +1,7 @@
+import Image from "next/image";
 import Link from "next/link";
-import { Search, ShoppingBag, ShoppingCart, User } from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { ChevronDown, Search, ShoppingBag, ShoppingCart, User } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -17,6 +18,15 @@ import { logoutAction } from "@/server/actions/auth";
 import { getCartCount } from "@/server/cart";
 
 const menuLinkClass = "flex w-full px-1.5 py-1";
+
+function initials(input: string | null | undefined): string {
+  if (!input) return "?";
+  const base = input.includes("@") ? input.split("@")[0] : input;
+  const parts = base.split(/[\s._-]+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 export async function Header() {
   const [session, cartCount] = await Promise.all([auth(), getCartCount()]);
@@ -71,10 +81,31 @@ export async function Header() {
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
-                <Button variant="ghost" size="icon" aria-label="Account menu" />
+                <button
+                  type="button"
+                  aria-label={user ? `Account menu for ${user.name ?? user.email}` : "Account menu"}
+                  className="flex h-9 items-center gap-1.5 rounded-full border border-border bg-background pl-1 pr-2 transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                />
               }
             >
-              <User className="size-5" />
+              {user?.image ? (
+                <Image
+                  src={user.image}
+                  alt=""
+                  width={28}
+                  height={28}
+                  className="size-7 rounded-full object-cover"
+                />
+              ) : user ? (
+                <span className="grid size-7 place-items-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                  {initials(user.name ?? user.email)}
+                </span>
+              ) : (
+                <span className="grid size-7 place-items-center rounded-full bg-muted text-muted-foreground">
+                  <User className="size-4" />
+                </span>
+              )}
+              <ChevronDown className="size-3.5 text-muted-foreground" aria-hidden />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               {user ? (

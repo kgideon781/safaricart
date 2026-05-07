@@ -73,6 +73,11 @@ const envSchema = z.object({
   // Integration table. Generate with: openssl rand -base64 32
   // Required only if you store secrets via /admin/integrations.
   SETTINGS_ENCRYPTION_KEY: optionalString,
+
+  // Comma-separated emails that are auto-promoted to ADMIN on sign-in.
+  // Idempotent (no-op if already ADMIN). Remove an email from this list to
+  // stop auto-promotion; existing role is unaffected.
+  INITIAL_ADMIN_EMAILS: optionalString,
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -82,6 +87,18 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+
+/** Lowercased emails that should be auto-promoted to ADMIN on sign-in. */
+export function initialAdminEmails(): Set<string> {
+  const raw = env.INITIAL_ADMIN_EMAILS;
+  if (!raw) return new Set();
+  return new Set(
+    raw
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
 
 /** Public origin for outbound links (emails, sitemap, callbacks). */
 export function publicAppUrl(): string {

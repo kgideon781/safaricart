@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { UserRole } from "@prisma/client";
 import { db } from "@/server/db";
 import { requireRole } from "@/server/auth";
 import { slugify } from "@/lib/text";
@@ -519,4 +520,48 @@ export async function createVendorPayoutAction(formData: FormData): Promise<void
   });
 
   revalidatePath("/admin/vendors");
+}
+
+// ─── User role management ─────────────────────────────────────────────────
+
+const setUserRoleSchema = z.object({
+  userId: z.string().min(1),
+  role: z.nativeEnum(UserRole),
+});
+
+export async function setUserRoleAction(
+  formData: FormData,
+): Promise<FormResult> {
+  await requireRole("ADMIN", "/admin/users");
+
+  const parsed = setUserRoleSchema.safeParse({
+    userId: formData.get("userId"),
+    role: formData.get("role"),
+  });
+  if (!parsed.success) {
+    return { error: "Invalid input" };
+  }
+  const { userId, role } = parsed.data;
+
+  const target = await db.user.findUnique({
+    where: { id: userId },
+    select: { role: true, email: true },
+  });
+  if (!target) return { error: "User not found" };
+  if (target.role === role) return null;
+
+  // Refuse any change that would leave the system with zero ADMINs.
+  if (target.role === "ADMIN" && role !== "ADMIN") {
+    const remaining = await db.user.count({
+      where: { role: "ADMIN", id: { not: userId } },
+    });
+    if (remaining === 0) {
+      return { error: "Cannot demote the last admin" };
+    }
+  }
+
+  await db.user.update({ where: { id: userId }, data: { role } });
+  log.info("user role changed", { userId, from: target.role, to: role });
+  revalidatePath("/admin/users");
+  return { success: `Role updated to ${role}` };
 }

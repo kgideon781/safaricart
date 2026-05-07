@@ -1,17 +1,14 @@
 import type { Metadata } from "next";
 import { getAllUsers } from "@/server/queries/admin";
-import { Badge } from "@/components/ui/badge";
+import { requireRole } from "@/server/auth";
+import { RoleSelect } from "./role-select";
 
 export const metadata: Metadata = { title: "Admin · Users" };
 
-const roleClass: Record<string, string> = {
-  CUSTOMER: "bg-muted text-muted-foreground",
-  VENDOR: "bg-secondary text-secondary-foreground",
-  ADMIN: "bg-primary text-primary-foreground",
-};
-
 export default async function AdminUsersPage() {
+  const session = await requireRole("ADMIN", "/admin/users");
   const users = await getAllUsers();
+  const currentUserId = session.user.id;
 
   return (
     <div className="flex flex-col gap-4">
@@ -24,16 +21,13 @@ export default async function AdminUsersPage() {
 
       <ul className="flex flex-col divide-y divide-border rounded-lg border border-border bg-card">
         {users.map((u) => (
-          <li
-            key={u.id}
-            className="flex items-center gap-4 p-4"
-          >
+          <li key={u.id} className="flex items-center gap-4 p-4">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-medium">{u.name ?? "—"}</span>
-                <Badge className={roleClass[u.role] ?? roleClass.CUSTOMER}>
-                  {u.role}
-                </Badge>
+                {u.id === currentUserId && (
+                  <span className="text-xs text-muted-foreground">(you)</span>
+                )}
                 {u.vendor && (
                   <span className="text-xs text-muted-foreground">
                     /{u.vendor.slug} · {u.vendor.status}
@@ -49,6 +43,11 @@ export default async function AdminUsersPage() {
                 })}
               </p>
             </div>
+            <RoleSelect
+              userId={u.id}
+              currentRole={u.role}
+              isSelf={u.id === currentUserId}
+            />
           </li>
         ))}
       </ul>
