@@ -112,7 +112,7 @@ export default async function OrderDetailPage({
                   : "Will be collected on delivery"}
             </p>
             {order.paymentReference && (
-              <p className="mt-1 font-mono text-xs text-muted-foreground">
+              <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
                 Ref: {order.paymentReference}
               </p>
             )}

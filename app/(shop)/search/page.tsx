@@ -77,7 +77,7 @@ export default async function SearchPage({
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-8 md:px-6 md:py-12">
-      <h1 className="font-heading text-3xl font-bold tracking-tight md:text-4xl">
+      <h1 className="break-words font-heading text-3xl font-bold tracking-tight md:text-4xl">
         {trimmed ? `Search results for "${trimmed}"` : "Search"}
       </h1>
       <p className="mt-2 text-sm text-muted-foreground">

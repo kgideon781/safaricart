@@ -84,7 +84,7 @@ export default async function AdminVendorsPage() {
                   {v.status === "APPROVED" && (
                     <form action={suspendVendorAction} className="flex items-center gap-1">
                       <input type="hidden" name="id" value={v.id} />
-                      <Input name="notes" placeholder="Reason" className="h-8 w-32 text-xs" />
+                      <Input name="notes" placeholder="Reason" className="h-8 w-full text-xs sm:w-32" />
                       <Button type="submit" size="sm" variant="destructive">
                         Suspend
                       </Button>
@@ -173,13 +173,13 @@ export default async function AdminVendorsPage() {
                       name="destinationLabel"
                       placeholder="Destination (e.g. Paybill 522522 acct 123)"
                       defaultValue={defaultDestination}
-                      className="h-8 min-w-64 text-xs"
+                      className="h-8 w-full text-xs sm:min-w-64 sm:flex-1"
                       required
                     />
                     <Input
                       name="reference"
                       placeholder="Bank/M-Pesa ref"
-                      className="h-8 w-40 text-xs"
+                      className="h-8 w-full text-xs sm:w-40"
                     />
                     <Button type="submit" size="sm">
                       Record payout

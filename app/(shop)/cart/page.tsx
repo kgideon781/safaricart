@@ -82,14 +82,14 @@ export default async function CartPage() {
                   )}
                 </Link>
 
-                <div className="flex flex-1 flex-col">
+                <div className="flex min-w-0 flex-1 flex-col">
                   <Link
                     href={`/product/${item.slug}`}
                     className="line-clamp-2 text-sm font-medium hover:text-primary"
                   >
                     {item.title}
                   </Link>
-                  <p className="mt-1 text-xs text-muted-foreground">
+                  <p className="mt-1 truncate text-xs text-muted-foreground">
                     Sold by {item.vendorName}
                   </p>
                   {overStock && (
@@ -97,7 +97,7 @@ export default async function CartPage() {
                       Only {item.stock} in stock
                     </p>
                   )}
-                  <div className="mt-3 flex items-center gap-3">
+                  <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
                     <form
                       action={updateCartQuantityAction}
                       className="flex items-center gap-1 rounded-md border border-border"
