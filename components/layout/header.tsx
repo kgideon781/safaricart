@@ -70,12 +70,14 @@ export async function Header() {
 
         <nav className="ml-auto flex items-center gap-1 md:gap-2">
           {user?.role !== "VENDOR" && user?.role !== "ADMIN" && (
-            <Link
-              href="/vendor/register"
-              className={`${buttonVariants({ variant: "ghost", size: "sm" })} hidden lg:inline-flex`}
-            >
-              Sell on SafariCart
-            </Link>
+            <div className="hidden lg:block">
+              <Link
+                href="/vendor/register"
+                className={buttonVariants({ variant: "ghost", size: "sm" })}
+              >
+                Sell on SafariCart
+              </Link>
+            </div>
           )}
 
           <DropdownMenu>

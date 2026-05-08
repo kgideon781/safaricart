@@ -130,10 +130,10 @@
     @apply border-border outline-ring/50;
   }
   html {
-    @apply overflow-x-hidden;
+    @apply relative w-full overflow-x-hidden;
   }
   body {
-    @apply bg-background text-foreground font-sans overflow-x-hidden;
+    @apply relative w-full bg-background text-foreground font-sans overflow-x-hidden;
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-heading;
