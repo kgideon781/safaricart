@@ -204,7 +204,7 @@ export async function Header() {
             {cartCount > 0 && (
               <Badge
                 variant="destructive"
-                className="absolute -right-1 -top-1 h-5 min-w-5 justify-center rounded-full px-1 text-xs"
+                className="pointer-events-none absolute right-0 top-0 h-4 min-w-4 justify-center rounded-full px-1 text-[10px] leading-none"
               >
                 {cartCount}
               </Badge>
