@@ -23,28 +23,28 @@ export default function ContactPage() {
         <div>
           <div className="font-medium text-foreground">Customer support</div>
           <a
-            href="mailto:hello@safaricart.co.ke"
+            href="mailto:support@safaricart.co.ke"
             className="hover:text-primary"
           >
-            hello@safaricart.co.ke
+            support@safaricart.co.ke
           </a>
         </div>
         <div>
-          <div className="font-medium text-foreground">Vendor support</div>
+          <div className="font-medium text-foreground">Sales &amp; partnerships</div>
           <a
-            href="mailto:vendors@safaricart.co.ke"
+            href="mailto:sales@safaricart.co.ke"
             className="hover:text-primary"
           >
-            vendors@safaricart.co.ke
+            sales@safaricart.co.ke
           </a>
         </div>
         <div>
-          <div className="font-medium text-foreground">Press</div>
+          <div className="font-medium text-foreground">Orders</div>
           <a
-            href="mailto:press@safaricart.co.ke"
+            href="mailto:orders@safaricart.co.ke"
             className="hover:text-primary"
           >
-            press@safaricart.co.ke
+            orders@safaricart.co.ke
           </a>
         </div>
         <div>

@@ -15,6 +15,12 @@ const log = logger("marketing");
 const contactSchema = z.object({
   name: z.string().trim().min(2).max(100),
   email: z.string().email(),
+  topic: z
+    .string()
+    .trim()
+    .max(60)
+    .optional()
+    .transform((v) => (v === "" || v == null ? null : v)),
   subject: z.string().trim().min(2).max(150),
   message: z.string().trim().min(10).max(4000),
 });
@@ -23,6 +29,12 @@ export async function submitContactAction(
   _prev: FormResult,
   formData: FormData,
 ): Promise<FormResult> {
+  // Honeypot — bots fill the hidden `website` field; real users don't.
+  // Silently succeed so the bot doesn't probe for a different bypass.
+  if ((formData.get("website") ?? "") !== "") {
+    return { success: "Thanks — your message is on its way." };
+  }
+
   const ip = await clientIp();
   const limit = await rateLimit({
     key: `contact:${ip}`,
@@ -36,6 +48,7 @@ export async function submitContactAction(
   const parsed = contactSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
+    topic: formData.get("topic") ?? undefined,
     subject: formData.get("subject"),
     message: formData.get("message"),
   });
@@ -48,13 +61,19 @@ export async function submitContactAction(
     select: { email: true },
   });
 
+  const subjectLine = parsed.data.topic
+    ? `[Contact · ${parsed.data.topic}] ${parsed.data.subject}`
+    : `[Contact] ${parsed.data.subject}`;
+
   const html = emailLayout({
     previewText: parsed.data.subject,
     bodyHtml: `
       <p style="margin:0 0 8px 0;font-size:16px;font-weight:600;">Contact form submission</p>
       <p style="margin:0 0 16px 0;color:#64748b;">From <strong>${esc(parsed.data.name)}</strong> &lt;${esc(parsed.data.email)}&gt;</p>
+      ${parsed.data.topic ? `<p style="margin:0 0 8px 0;"><strong>Topic:</strong> ${esc(parsed.data.topic)}</p>` : ""}
       <p style="margin:0 0 8px 0;"><strong>Subject:</strong> ${esc(parsed.data.subject)}</p>
       <p style="margin:0 0 16px 0;white-space:pre-wrap;line-height:1.6;">${esc(parsed.data.message)}</p>
+      <p style="margin:16px 0 0 0;font-size:12px;color:#94a3b8;">Reply to this email and it will go straight to ${esc(parsed.data.email)}.</p>
     `,
   });
 
@@ -62,9 +81,10 @@ export async function submitContactAction(
     admins.map((a) =>
       sendMail({
         to: a.email,
-        subject: `[Contact] ${parsed.data.subject}`,
+        subject: subjectLine,
         html,
         replyTo: parsed.data.email,
+        purpose: "support",
       }).catch((err) =>
         log.error("contact mail failed", { to: a.email, err: String(err) }),
       ),

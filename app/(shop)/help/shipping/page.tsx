@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -49,9 +50,9 @@ export default function ShippingPage() {
             Vendors are responsible for dispatch. We work with riders, parcel
             services, and matatu courier where appropriate. The courier and
             tracking number (when available) appear in your{" "}
-            <a href="/account/orders" className="text-primary underline-offset-2 hover:underline">
+            <Link href="/account/orders" className="text-primary underline-offset-2 hover:underline">
               order history
-            </a>{" "}
+            </Link>{" "}
             once the vendor marks the order as shipped.
           </p>
         </section>
