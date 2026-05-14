@@ -33,7 +33,7 @@ export async function isCloudinaryConfigured(): Promise<boolean> {
  * exact parameters can be used in the upload.
  */
 export async function signUpload(opts: {
-  folder: "products" | "vendor" | "kyc";
+  folder: "products" | "vendor" | "kyc" | "quotes";
   resourceType?: "image" | "raw" | "auto";
   publicIdPrefix?: string;
 }): Promise<{

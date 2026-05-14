@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { MapPin, Package, User } from "lucide-react";
+import { FileText, MapPin, Package, User } from "lucide-react";
 import { requireSession } from "@/server/auth";
 
 const navItems = [
   { href: "/account", label: "Profile", icon: User },
   { href: "/account/addresses", label: "Addresses", icon: MapPin },
   { href: "/account/orders", label: "Orders", icon: Package },
+  { href: "/account/quotes", label: "Quote requests", icon: FileText },
 ];
 
 export default async function AccountLayout({

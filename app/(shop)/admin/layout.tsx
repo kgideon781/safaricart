@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  FileText,
   Flag,
   KeyRound,
   LayoutDashboard,
@@ -19,6 +20,7 @@ const navItems = [
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/products", label: "Products", icon: Package },
   { href: "/admin/orders", label: "Orders", icon: ShoppingCart },
+  { href: "/admin/quotes", label: "Quote requests", icon: FileText },
   { href: "/admin/categories", label: "Categories", icon: Tag },
   { href: "/admin/promotions", label: "Promotions", icon: Megaphone },
   { href: "/admin/coupons", label: "Coupons", icon: Percent },

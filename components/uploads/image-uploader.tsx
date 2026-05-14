@@ -17,7 +17,7 @@ type SignPayload = {
 
 async function uploadOne(
   file: File,
-  folder: "products" | "vendor" | "kyc",
+  folder: "products" | "vendor" | "kyc" | "quotes",
 ): Promise<string> {
   const signRes = await fetch("/api/uploads/sign", {
     method: "POST",
@@ -60,7 +60,7 @@ export function ImageUploader({
   label,
 }: {
   name: string;
-  folder?: "products" | "vendor" | "kyc";
+  folder?: "products" | "vendor" | "kyc" | "quotes";
   initialUrls?: string[];
   max?: number;
   label?: string;
@@ -172,7 +172,7 @@ export function SingleImageUploader({
   aspect = "1/1",
 }: {
   name: string;
-  folder?: "products" | "vendor" | "kyc";
+  folder?: "products" | "vendor" | "kyc" | "quotes";
   initialUrl?: string | null;
   label?: string;
   aspect?: "1/1" | "16/9";

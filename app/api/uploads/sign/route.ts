@@ -7,7 +7,7 @@ import { rateLimit, clientIp } from "@/server/rate-limit";
 export const runtime = "nodejs";
 
 type Body = {
-  folder?: "products" | "vendor" | "kyc";
+  folder?: "products" | "vendor" | "kyc" | "quotes";
   resourceType?: "image" | "raw" | "auto";
 };
 
@@ -39,17 +39,21 @@ export async function POST(request: NextRequest) {
 
   const folder = body.folder ?? "products";
 
-  // Authorization per folder: only vendors can write to products/vendor/kyc;
-  // admins can write anywhere.
+  // Authorization per folder:
+  //   - products/vendor/kyc: vendors and admins
+  //   - quotes: any logged-in customer (reference images on a quote request)
   const role = session.user.role;
-  if (role !== "VENDOR" && role !== "ADMIN") {
+  if (folder === "quotes") {
+    // Any signed-in user may attach images to their quote request.
+  } else if (role !== "VENDOR" && role !== "ADMIN") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // For vendor folders, scope public_id prefix to this vendor so files are
-  // attributable and can be cleaned up if the vendor is removed.
+  // Scope public_id prefix so files are attributable and can be cleaned up.
   let publicIdPrefix: string | undefined;
-  if (role === "VENDOR") {
+  if (folder === "quotes") {
+    publicIdPrefix = `u_${session.user.id}`;
+  } else if (role === "VENDOR") {
     const vendor = await db.vendor.findUnique({
       where: { userId: session.user.id },
       select: { id: true },

@@ -162,6 +162,24 @@ export default async function SearchPage({
         <ProductGrid products={result.items} />
       </div>
 
+      {result.total === 0 && (
+        <div className="mt-6 rounded-lg border border-dashed border-border bg-card p-8 text-center">
+          <h2 className="font-heading text-lg font-semibold">
+            Can't find what you're looking for?
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Tell us what you need and our sourcing team will come back with a
+            quote — usually within 1–2 business days.
+          </p>
+          <a
+            href={`/request-quote${trimmed ? `?q=${encodeURIComponent(trimmed)}` : ""}`}
+            className="mt-4 inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            Request a quote
+          </a>
+        </div>
+      )}
+
       <Pagination
         page={result.page}
         totalPages={result.totalPages}

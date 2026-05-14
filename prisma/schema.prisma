@@ -46,6 +46,7 @@ model User {
   cart              Cart?
   reviews           Review[]
   couponRedemptions CouponRedemption[]
+  quoteRequests     QuoteRequest[]
 }
 
 enum UserRole {
@@ -630,18 +631,18 @@ enum PayoutMethod {
 // be one entity from the admin's POV: banner advertises code, code applies
 // the discount via the existing CouponRedemption flow.
 model Campaign {
-  id           String   @id @default(cuid())
-  title        String // admin-only label, never shown publicly
-  message      String // the banner text shown to all visitors
-  ctaLabel     String?
-  ctaHref      String?
-  couponId     String?
-  startsAt     DateTime @default(now())
-  endsAt       DateTime
-  isActive     Boolean  @default(true)
-  isDismissible Boolean @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String   @id @default(cuid())
+  title         String // admin-only label, never shown publicly
+  message       String // the banner text shown to all visitors
+  ctaLabel      String?
+  ctaHref       String?
+  couponId      String?
+  startsAt      DateTime @default(now())
+  endsAt        DateTime
+  isActive      Boolean  @default(true)
+  isDismissible Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   coupon Coupon? @relation(fields: [couponId], references: [id], onDelete: SetNull)
 
@@ -657,4 +658,56 @@ model NewsletterSubscriber {
   subscribedAt   DateTime  @default(now())
   unsubscribedAt DateTime?
   source         String? // optional context: "footer", "checkout", etc.
+}
+
+// ────────────────────────────────────────────────────────────
+// Quote requests
+// Customers ask for items SafariCart doesn't yet stock. An admin reviews,
+// sources the item, and replies with a quoted price. Customer then accepts
+// or declines. Email transitions: submitted → admin notified; quoted →
+// customer notified.
+// ────────────────────────────────────────────────────────────
+
+model QuoteRequest {
+  id              String             @id @default(cuid())
+  userId          String
+  title           String
+  description     String
+  quantity        Int                @default(1)
+  // Customer's optional ceiling. Helps admin decide whether to source.
+  targetPriceKes  Int?
+  // Snapshot — may differ from User.phone (e.g. friend's phone for delivery).
+  contactPhone    String // E.164
+  preferredCounty String? // optional delivery county
+  imageUrls       String[] // optional reference images; up to 4
+  status          QuoteRequestStatus @default(PENDING)
+
+  // Admin reply (set when status moves PENDING → QUOTED)
+  adminReplyKes      Int?
+  adminReplyLeadTime String? // free text: "3-5 business days", etc.
+  adminReplyNotes    String?
+  adminReplyAt       DateTime?
+  adminReplyBy       String? // admin user id; not a FK so we keep the audit row
+  // Quote validity — after this we treat it as expired/CLOSED.
+  adminReplyExpires  DateTime?
+
+  // Customer decision (set on ACCEPTED / DECLINED)
+  customerDecisionAt    DateTime?
+  customerDeclineReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+enum QuoteRequestStatus {
+  PENDING // awaiting admin response
+  QUOTED // admin has provided a price, awaiting customer decision
+  ACCEPTED // customer accepted — admin will follow up to place the order
+  DECLINED // customer declined the quote
+  CLOSED // admin closed (spam, can't source, expired)
 }
