@@ -1,8 +1,8 @@
 import type { MetadataRoute } from "next";
-import { publicAppUrl } from "@/server/env";
+import { requestBaseUrl } from "@/server/env";
 
-export default function robots(): MetadataRoute.Robots {
-  const base = publicAppUrl().replace(/\/$/, "");
+export default async function robots(): Promise<MetadataRoute.Robots> {
+  const base = (await requestBaseUrl()).replace(/\/$/, "");
   return {
     rules: [
       {

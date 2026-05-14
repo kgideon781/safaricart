@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import type { Metadata } from "next";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { requireVendor } from "@/server/vendor";
 import { getVendorProducts } from "@/server/queries/vendor";
 import { deleteProductAction } from "@/server/actions/vendor";
@@ -24,13 +24,22 @@ export default async function VendorProductsPage() {
             {products.length.toLocaleString("en-KE")} total
           </p>
         </div>
-        <Link
-          href="/vendor/dashboard/products/new"
-          className={buttonVariants({ size: "sm" })}
-        >
-          <Plus className="size-4" />
-          New product
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/vendor/dashboard/products/bulk"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            <Upload className="size-4" />
+            Bulk upload
+          </Link>
+          <Link
+            href="/vendor/dashboard/products/new"
+            className={buttonVariants({ size: "sm" })}
+          >
+            <Plus className="size-4" />
+            New product
+          </Link>
+        </div>
       </div>
 
       {products.length === 0 ? (

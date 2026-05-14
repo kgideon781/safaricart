@@ -1,9 +1,9 @@
 import type { MetadataRoute } from "next";
 import { db } from "@/server/db";
-import { publicAppUrl } from "@/server/env";
+import { requestBaseUrl } from "@/server/env";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const base = publicAppUrl().replace(/\/$/, "");
+  const base = (await requestBaseUrl()).replace(/\/$/, "");
 
   const [products, categories, vendors] = await Promise.all([
     db.product.findMany({

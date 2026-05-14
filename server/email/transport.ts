@@ -2,7 +2,7 @@ import "server-only";
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 import { logger } from "@/server/log";
-import { getSmtpConfig } from "@/server/integrations";
+import { getSmtpConfig, type MailPurpose, type SmtpConfig } from "@/server/integrations";
 
 const log = logger("email");
 
@@ -13,7 +13,7 @@ const log = logger("email");
  */
 async function makeTransport(): Promise<{
   transport: Transporter;
-  from: string;
+  config: SmtpConfig;
   configured: boolean;
 }> {
   const { config } = await getSmtpConfig();
@@ -22,7 +22,7 @@ async function makeTransport(): Promise<{
     log.warn("SMTP not configured — using JSON transport (logs only)");
     return {
       transport: nodemailer.createTransport({ jsonTransport: true }),
-      from: config.from,
+      config,
       configured: false,
     };
   }
@@ -33,9 +33,16 @@ async function makeTransport(): Promise<{
       secure: config.secure,
       auth: { user: config.user, pass: config.pass },
     }),
-    from: config.from,
+    config,
     configured: true,
   };
+}
+
+function pickFrom(config: SmtpConfig, purpose: MailPurpose | undefined): string {
+  if (purpose && config.fromByPurpose[purpose]) {
+    return config.fromByPurpose[purpose]!;
+  }
+  return config.from;
 }
 
 export async function sendMail(opts: {
@@ -44,8 +51,15 @@ export async function sendMail(opts: {
   html: string;
   text?: string;
   replyTo?: string;
+  /**
+   * Which mailbox the email is from. Maps to a FROM alias (system → no-reply@,
+   * orders → orders@, support → support@, sales → sales@). Defaults to the
+   * generic FROM when omitted.
+   */
+  purpose?: MailPurpose;
 }): Promise<void> {
-  const { transport, from } = await makeTransport();
+  const { transport, config } = await makeTransport();
+  const from = pickFrom(config, opts.purpose);
   try {
     const info = await transport.sendMail({
       from,
@@ -55,9 +69,19 @@ export async function sendMail(opts: {
       text: opts.text,
       replyTo: opts.replyTo,
     });
-    log.info("mail sent", { to: opts.to, subject: opts.subject, messageId: info.messageId });
+    log.info("mail sent", {
+      to: opts.to,
+      subject: opts.subject,
+      purpose: opts.purpose ?? "default",
+      messageId: info.messageId,
+    });
   } catch (err) {
-    log.error("mail failed", { to: opts.to, subject: opts.subject, err: String(err) });
+    log.error("mail failed", {
+      to: opts.to,
+      subject: opts.subject,
+      purpose: opts.purpose ?? "default",
+      err: String(err),
+    });
     throw err;
   }
 }

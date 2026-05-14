@@ -5,7 +5,7 @@ import { BadgeCheck, MapPin } from "lucide-react";
 import { getVendorBySlug, getProductsByVendor } from "@/server/queries/catalog";
 import { ProductGrid } from "@/components/product/product-grid";
 import { Pagination } from "@/components/layout/pagination";
-import { publicAppUrl } from "@/server/env";
+import { requestBaseUrl } from "@/server/env";
 
 const PER_PAGE = 24;
 
@@ -25,7 +25,7 @@ export async function generateMetadata({
   const description =
     vendor.description?.slice(0, 200) ??
     `Shop ${vendor.name}'s products on SafariCart — Kenya's online marketplace.`;
-  const url = `${publicAppUrl().replace(/\/$/, "")}/vendor/${vendor.slug}`;
+  const url = `${(await requestBaseUrl()).replace(/\/$/, "")}/vendor/${vendor.slug}`;
   return {
     title: vendor.name,
     description,
@@ -61,7 +61,7 @@ export default async function VendorPublicPage({
 
   const products = await getProductsByVendor(slug, { page, perPage: PER_PAGE });
 
-  const baseUrl = publicAppUrl().replace(/\/$/, "");
+  const baseUrl = (await requestBaseUrl()).replace(/\/$/, "");
   const breadcrumbLd = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",

@@ -59,6 +59,7 @@ export async function sendOrderConfirmationEmails(orderId: string): Promise<void
         to: order.user.email,
         subject: `SafariCart order ${order.orderNumber} confirmed`,
         html,
+        purpose: "orders",
       });
     } catch (err) {
       log.error("customer email failed", { orderNumber: order.orderNumber, err: String(err) });
@@ -99,6 +100,7 @@ export async function sendOrderConfirmationEmails(orderId: string): Promise<void
         to,
         subject: `New SafariCart order — ${order.orderNumber}`,
         html,
+        purpose: "orders",
       });
     } catch (err) {
       log.error("vendor email failed", { vendorId: vendor.id, err: String(err) });

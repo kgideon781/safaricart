@@ -9,6 +9,7 @@ import { requireSession } from "@/server/auth";
 import { requireVendor } from "@/server/vendor";
 import { KENYAN_COUNTIES, normalizeKenyanPhone } from "@/lib/kenya";
 import { slugify } from "@/lib/text";
+import { parseCsv } from "@/lib/csv";
 import { creditVendorsForOrder } from "@/server/payouts";
 import { vendorPayableKes } from "@/server/payouts";
 import { notifyAdminsNewVendor, notifyAdminsKycUpload } from "@/server/email/admin";
@@ -270,6 +271,275 @@ export async function deleteProductAction(formData: FormData) {
     await db.product.deleteMany({ where: { id, vendorId: vendor.id } });
   }
   revalidatePath("/vendor/dashboard/products");
+}
+
+// ─── Bulk product import (CSV) ────────────────────────────────────────────
+
+export type BulkRowError = { row: number; errors: string[] };
+export type BulkUploadResult =
+  | null
+  | { error: string }
+  | {
+      success: string;
+      created: number;
+      failed: number;
+      rowErrors: BulkRowError[];
+    };
+
+const bulkRowSchema = z.object({
+  title: z.string().trim().min(3).max(200),
+  description: z.string().trim().min(1).max(5000),
+  categorySlug: z.string().trim().min(1),
+  priceKes: z.coerce.number().int().min(1),
+  compareAtPriceKes: z
+    .preprocess(
+      (v) => (v === "" || v == null ? null : v),
+      z.coerce.number().int().positive().nullable(),
+    )
+    .optional(),
+  stock: z.coerce.number().int().min(0).max(1_000_000).default(0),
+  weightGrams: z
+    .preprocess(
+      (v) => (v === "" || v == null ? null : v),
+      z.coerce.number().int().positive().nullable(),
+    )
+    .optional(),
+  sku: z
+    .string()
+    .trim()
+    .max(60)
+    .optional()
+    .transform((v) => (v === "" || v == null ? null : v)),
+  imageUrls: z
+    .preprocess(
+      (v) => {
+        if (typeof v !== "string" || v.trim() === "") return [];
+        return v
+          .split(";")
+          .map((s) => s.trim())
+          .filter(Boolean);
+      },
+      z.array(z.string().url()).max(8),
+    )
+    .default([]),
+  isPublished: z
+    .string()
+    .optional()
+    .transform((v) => {
+      const norm = (v ?? "").trim().toLowerCase();
+      if (norm === "" || norm === "true" || norm === "1" || norm === "yes") return true;
+      return false;
+    }),
+});
+
+export async function bulkCreateProductsAction(
+  _prev: BulkUploadResult,
+  formData: FormData,
+): Promise<BulkUploadResult> {
+  const { vendor } = await requireVendor("/vendor/dashboard/products/bulk");
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Pick a CSV file to upload." };
+  }
+  if (file.size > 2_000_000) {
+    return { error: "CSV is too large (max 2 MB)." };
+  }
+
+  const text = await file.text();
+  const rows = parseCsv(text);
+  if (rows.length === 0) {
+    return { error: "The file is empty." };
+  }
+
+  // Skip leading documentation lines that start with "#" in the first column.
+  let cursor = 0;
+  while (
+    cursor < rows.length &&
+    (rows[cursor].length === 0 ||
+      (rows[cursor][0] ?? "").trim().startsWith("#") ||
+      rows[cursor].every((c) => (c ?? "").trim() === ""))
+  ) {
+    cursor++;
+  }
+  if (cursor >= rows.length) {
+    return { error: "No header row found." };
+  }
+
+  const header = rows[cursor].map((h) => h.trim());
+  cursor++;
+
+  // Validate the header — vendors might rearrange columns; we map by name.
+  const headerIndex: Record<string, number> = {};
+  header.forEach((name, i) => {
+    headerIndex[name] = i;
+  });
+  const REQUIRED = ["title", "description", "categorySlug", "priceKes"] as const;
+  const missing = REQUIRED.filter((h) => !(h in headerIndex));
+  if (missing.length > 0) {
+    return { error: `Missing required columns: ${missing.join(", ")}` };
+  }
+
+  const dataRows = rows.slice(cursor).filter((r) => r.some((c) => (c ?? "").trim() !== ""));
+  if (dataRows.length === 0) {
+    return { error: "No data rows found." };
+  }
+  if (dataRows.length > 500) {
+    return { error: "Too many rows (max 500 per upload)." };
+  }
+
+  // Pre-load categories so we can resolve slugs without N+1 queries.
+  const categories = await db.category.findMany({
+    select: { id: true, slug: true },
+  });
+  const categoryBySlug = new Map(categories.map((c) => [c.slug.toLowerCase(), c.id]));
+
+  // Collect existing slugs/SKUs once; track new ones in-memory to avoid
+  // collisions within the batch itself.
+  const usedSlugs = new Set<string>(
+    (
+      await db.product.findMany({ select: { slug: true } })
+    ).map((p) => p.slug),
+  );
+  const usedSkus = new Set<string>(
+    (
+      await db.product.findMany({
+        where: { vendorId: vendor.id, sku: { not: null } },
+        select: { sku: true },
+      })
+    )
+      .map((p) => p.sku)
+      .filter((s): s is string => s !== null),
+  );
+
+  type Prepared = {
+    slug: string;
+    title: string;
+    description: string;
+    categoryId: string;
+    priceKes: number;
+    compareAtPriceKes: number | null;
+    stock: number;
+    weightGrams: number | null;
+    sku: string | null;
+    images: string[];
+    isPublished: boolean;
+  };
+
+  const prepared: Prepared[] = [];
+  const rowErrors: BulkRowError[] = [];
+
+  dataRows.forEach((cells, idx) => {
+    // Human-friendly row number = header offset + data index + 1
+    const rowNumber = cursor + idx + 1;
+
+    const get = (key: string) => {
+      const i = headerIndex[key];
+      return i == null ? "" : (cells[i] ?? "").trim();
+    };
+
+    const parsed = bulkRowSchema.safeParse({
+      title: get("title"),
+      description: get("description"),
+      categorySlug: get("categorySlug"),
+      priceKes: get("priceKes"),
+      compareAtPriceKes: get("compareAtPriceKes"),
+      stock: get("stock") || "0",
+      weightGrams: get("weightGrams"),
+      sku: get("sku"),
+      imageUrls: get("imageUrls"),
+      isPublished: get("isPublished"),
+    });
+    if (!parsed.success) {
+      const flat = parsed.error.flatten().fieldErrors;
+      const messages = Object.entries(flat).flatMap(([field, errs]) =>
+        (errs ?? []).map((e) => `${field}: ${e}`),
+      );
+      rowErrors.push({ row: rowNumber, errors: messages });
+      return;
+    }
+
+    const categoryId = categoryBySlug.get(parsed.data.categorySlug.toLowerCase());
+    if (!categoryId) {
+      rowErrors.push({
+        row: rowNumber,
+        errors: [`categorySlug: unknown category "${parsed.data.categorySlug}"`],
+      });
+      return;
+    }
+
+    let slug = slugify(parsed.data.title) || "product";
+    if (usedSlugs.has(slug)) {
+      let attempt = 1;
+      while (usedSlugs.has(`${slug}-${attempt}`) && attempt <= 200) attempt++;
+      if (attempt > 200) {
+        rowErrors.push({ row: rowNumber, errors: ["Could not generate unique slug"] });
+        return;
+      }
+      slug = `${slug}-${attempt}`;
+    }
+    usedSlugs.add(slug);
+
+    let sku = parsed.data.sku;
+    if (sku) {
+      if (usedSkus.has(sku)) {
+        rowErrors.push({
+          row: rowNumber,
+          errors: [`sku: "${sku}" is already used`],
+        });
+        return;
+      }
+      usedSkus.add(sku);
+    }
+
+    prepared.push({
+      slug,
+      title: parsed.data.title,
+      description: parsed.data.description,
+      categoryId,
+      priceKes: parsed.data.priceKes,
+      compareAtPriceKes: parsed.data.compareAtPriceKes ?? null,
+      stock: parsed.data.stock,
+      weightGrams: parsed.data.weightGrams ?? null,
+      sku,
+      images: parsed.data.imageUrls,
+      isPublished: parsed.data.isPublished,
+    });
+  });
+
+  if (prepared.length > 0) {
+    await db.product.createMany({
+      data: prepared.map((p) => ({
+        slug: p.slug,
+        title: p.title,
+        description: p.description,
+        vendorId: vendor.id,
+        categoryId: p.categoryId,
+        priceKes: p.priceKes,
+        compareAtPriceKes: p.compareAtPriceKes,
+        stock: p.stock,
+        weightGrams: p.weightGrams,
+        sku: p.sku,
+        images: p.images,
+        isPublished: p.isPublished,
+      })),
+    });
+    revalidatePath("/vendor/dashboard/products");
+  }
+
+  const message =
+    prepared.length === 0
+      ? `No products imported — ${rowErrors.length} row${rowErrors.length === 1 ? "" : "s"} had errors.`
+      : `Imported ${prepared.length} product${prepared.length === 1 ? "" : "s"}${
+          rowErrors.length > 0 ? `; skipped ${rowErrors.length} with errors.` : "."
+        }`;
+
+  return {
+    success: message,
+    created: prepared.length,
+    failed: rowErrors.length,
+    rowErrors,
+  };
 }
 
 // ─── Vendor profile settings ──────────────────────────────────────────────

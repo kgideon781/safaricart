@@ -98,20 +98,40 @@ const SCOPE_META: Record<
   smtp: {
     title: "SMTP (Email)",
     blurb:
-      "Outbound email — order confirmations, password resets, vendor notifications. Works with Gmail App Passwords, Mailtrap, SendGrid SMTP, Zoho, etc.",
+      "Outbound email — order confirmations, password resets, vendor notifications. Works with Brevo, Gmail App Passwords, Mailtrap, SendGrid SMTP, Zoho, etc. Per-purpose From addresses are optional — when blank, all mail uses the default From.",
     docsHref: "https://nodemailer.com/smtp/",
     publicFields: [
-      { key: "host", label: "SMTP host", placeholder: "smtp.gmail.com" },
+      { key: "host", label: "SMTP host", placeholder: "smtp-relay.brevo.com" },
       { key: "port", label: "Port", placeholder: "587", type: "number" },
       { key: "secure", label: "Use TLS (port 465)" },
-      { key: "user", label: "Username", placeholder: "you@example.com" },
+      { key: "user", label: "Username", placeholder: "abc123@smtp-brevo.com" },
       {
         key: "from",
-        label: "From address",
+        label: "From — default",
         placeholder: "SafariCart <no-reply@safaricart.co.ke>",
       },
+      {
+        key: "fromSystem",
+        label: "From — system (password reset, verification)",
+        placeholder: "SafariCart <no-reply@safaricart.co.ke>",
+      },
+      {
+        key: "fromOrders",
+        label: "From — orders (receipts, status, refunds)",
+        placeholder: "SafariCart Orders <orders@safaricart.co.ke>",
+      },
+      {
+        key: "fromSupport",
+        label: "From — support (admin/vendor alerts)",
+        placeholder: "SafariCart Support <support@safaricart.co.ke>",
+      },
+      {
+        key: "fromSales",
+        label: "From — sales (marketing, newsletter)",
+        placeholder: "SafariCart <sales@safaricart.co.ke>",
+      },
     ],
-    secretFields: [{ key: "pass", label: "Password" }],
+    secretFields: [{ key: "pass", label: "Password / SMTP key" }],
     supportsTestMode: false,
   },
   cloudinary: {

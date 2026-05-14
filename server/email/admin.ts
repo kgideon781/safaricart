@@ -27,9 +27,13 @@ async function notifyAdmins(opts: {
   }
   await Promise.allSettled(
     admins.map((a) =>
-      sendMail({ to: a.email, subject: opts.subject, html: opts.html, text: opts.text }).catch(
-        (err) => log.error("admin email failed", { to: a.email, err: String(err) }),
-      ),
+      sendMail({
+        to: a.email,
+        subject: opts.subject,
+        html: opts.html,
+        text: opts.text,
+        purpose: "support",
+      }).catch((err) => log.error("admin email failed", { to: a.email, err: String(err) })),
     ),
   );
 }

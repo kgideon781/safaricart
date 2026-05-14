@@ -60,6 +60,10 @@ const PUBLIC_SCHEMAS: Record<IntegrationScope, z.ZodTypeAny> = {
       .transform((v) => v === "on" || v === "true"),
     user: z.string().trim().max(200).optional(),
     from: z.string().trim().max(200).optional(),
+    fromSystem: z.string().trim().max(200).optional(),
+    fromOrders: z.string().trim().max(200).optional(),
+    fromSupport: z.string().trim().max(200).optional(),
+    fromSales: z.string().trim().max(200).optional(),
   }),
   cloudinary: z.object({
     cloudName: z.string().trim().max(100).optional(),

@@ -65,13 +65,23 @@ export type PaystackConfig = {
   publicKey: string | null;
 };
 
+/**
+ * Mail purpose tags select the FROM address. They map roughly to mailbox
+ * aliases: system = no-reply@, orders = orders@, support = support@,
+ * sales = sales@. Add new purposes here when adding a new alias.
+ */
+export type MailPurpose = "system" | "orders" | "support" | "sales";
+
 export type SmtpConfig = {
   host: string | null;
   port: number | null;
   secure: boolean;
   user: string | null;
   pass: string | null;
+  /** Default FROM — used when no purpose-specific FROM is set. */
   from: string;
+  /** Per-purpose FROM overrides. Missing keys fall back to `from`. */
+  fromByPurpose: Partial<Record<MailPurpose, string>>;
 };
 
 export type CloudinaryConfig = {
@@ -258,8 +268,29 @@ export async function getSmtpConfig(): Promise<ResolveResult<SmtpConfig>> {
           env.EMAIL_FROM ??
           "SafariCart <no-reply@safaricart.co.ke>"
         : env.EMAIL_FROM ?? "SafariCart <no-reply@safaricart.co.ke>",
+      fromByPurpose: resolveFromByPurpose(useDb ? row!.publicConfig : null),
     },
   };
+}
+
+function resolveFromByPurpose(
+  publicConfig: Record<string, unknown> | null,
+): Partial<Record<MailPurpose, string>> {
+  // DB values win over env. Both are optional — anything missing falls back
+  // to the default `from` at send time.
+  const out: Partial<Record<MailPurpose, string>> = {};
+  const pc = publicConfig ?? {};
+  const pairs: [MailPurpose, string | null | undefined, string | undefined][] = [
+    ["system", pickString(pc, "fromSystem"), env.EMAIL_FROM_SYSTEM],
+    ["orders", pickString(pc, "fromOrders"), env.EMAIL_FROM_ORDERS],
+    ["support", pickString(pc, "fromSupport"), env.EMAIL_FROM_SUPPORT],
+    ["sales", pickString(pc, "fromSales"), env.EMAIL_FROM_SALES],
+  ];
+  for (const [purpose, dbValue, envValue] of pairs) {
+    const v = dbValue ?? envValue;
+    if (v) out[purpose] = v;
+  }
+  return out;
 }
 
 export async function getCloudinaryConfig(): Promise<ResolveResult<CloudinaryConfig>> {
@@ -330,7 +361,17 @@ const SCOPE_FIELDS: Record<
     secretKeys: ["secretKey"],
   },
   smtp: {
-    publicKeys: ["host", "port", "secure", "user", "from"],
+    publicKeys: [
+      "host",
+      "port",
+      "secure",
+      "user",
+      "from",
+      "fromSystem",
+      "fromOrders",
+      "fromSupport",
+      "fromSales",
+    ],
     secretKeys: ["pass"],
   },
   cloudinary: {

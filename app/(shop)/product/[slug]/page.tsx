@@ -10,7 +10,7 @@ import { AddToCartForm } from "@/components/product/add-to-cart-form";
 import { getProductBySlug } from "@/server/queries/catalog";
 import { addToCartAndCheckoutAction } from "@/server/actions/cart";
 import { formatKES } from "@/lib/kenya";
-import { publicAppUrl } from "@/server/env";
+import { requestBaseUrl } from "@/server/env";
 
 type RouteParams = Promise<{ slug: string }>;
 
@@ -23,7 +23,7 @@ export async function generateMetadata({
   const product = await getProductBySlug(slug);
   if (!product) return { title: "Product not found" };
   const description = product.description.slice(0, 200);
-  const url = `${publicAppUrl().replace(/\/$/, "")}/product/${product.slug}`;
+  const url = `${(await requestBaseUrl()).replace(/\/$/, "")}/product/${product.slug}`;
   const images = product.images.length > 0 ? product.images.slice(0, 4) : undefined;
   return {
     title: product.title,
@@ -67,9 +67,8 @@ export default async function ProductPage({
     : 0;
   const inStock = product.stock > 0;
   const primaryImage = product.images[0];
-  const productUrl = `${publicAppUrl().replace(/\/$/, "")}/product/${product.slug}`;
-
-  const baseUrl = publicAppUrl().replace(/\/$/, "");
+  const baseUrl = (await requestBaseUrl()).replace(/\/$/, "");
+  const productUrl = `${baseUrl}/product/${product.slug}`;
 
   // schema.org Product JSON-LD — helps Google show price, stock, ratings.
   const jsonLd = {

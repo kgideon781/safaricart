@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { getCategoryBySlug, getProductsByCategory } from "@/server/queries/catalog";
 import { ProductGrid } from "@/components/product/product-grid";
 import { Pagination } from "@/components/layout/pagination";
-import { publicAppUrl } from "@/server/env";
+import { requestBaseUrl } from "@/server/env";
 
 const PER_PAGE = 24;
 
@@ -18,7 +18,7 @@ export async function generateMetadata({
   const { slug } = await params;
   const category = await getCategoryBySlug(slug);
   if (!category) return { title: "Category not found" };
-  const url = `${publicAppUrl().replace(/\/$/, "")}/category/${category.slug}`;
+  const url = `${(await requestBaseUrl()).replace(/\/$/, "")}/category/${category.slug}`;
   const description =
     category.description ?? `Shop ${category.name} on SafariCart — Kenya's online marketplace.`;
   return {
@@ -51,7 +51,7 @@ export default async function CategoryPage({
   const page = Math.max(1, Number(pageParam) || 1);
   const result = await getProductsByCategory(slug, { page, perPage: PER_PAGE });
 
-  const baseUrl = publicAppUrl().replace(/\/$/, "");
+  const baseUrl = (await requestBaseUrl()).replace(/\/$/, "");
   const breadcrumbLd = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",

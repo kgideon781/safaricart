@@ -26,6 +26,7 @@ export async function sendVerificationEmail(opts: {
     subject: "Confirm your SafariCart email",
     html,
     text: `Verify your email: ${link}`,
+    purpose: "system",
   });
 }
 
@@ -52,5 +53,6 @@ export async function sendPasswordResetEmail(opts: {
     subject: "Reset your SafariCart password",
     html,
     text: `Reset your password: ${link}`,
+    purpose: "system",
   });
 }

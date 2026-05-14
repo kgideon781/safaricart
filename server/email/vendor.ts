@@ -28,7 +28,7 @@ export async function sendVendorStatusEmail(opts: {
       <p style="margin:0 0 24px 0;">${buttonHtml(dashLink, "Open vendor dashboard")}</p>
     `,
   });
-  await sendMail({ to: opts.to, subject, html });
+  await sendMail({ to: opts.to, subject, html, purpose: "support" });
 }
 
 export async function sendRefundEmail(opts: {
@@ -51,5 +51,6 @@ export async function sendRefundEmail(opts: {
     to: opts.to,
     subject: `Refund issued for order ${opts.orderNumber}`,
     html,
+    purpose: "orders",
   });
 }

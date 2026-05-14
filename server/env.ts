@@ -1,4 +1,5 @@
 import "server-only";
+import { headers } from "next/headers";
 import { z } from "zod";
 
 // Treat empty strings as "unset" so .env files with blank placeholders pass
@@ -60,7 +61,13 @@ const envSchema = z.object({
     .transform((v) => v === "true"),
   SMTP_USER: optionalString,
   SMTP_PASS: optionalString,
+  // Default FROM, used when a purpose-specific override isn't set.
   EMAIL_FROM: optionalString,
+  // Purpose-specific FROM overrides. Each falls back to EMAIL_FROM.
+  EMAIL_FROM_SYSTEM: optionalString, // auth, verification, password reset
+  EMAIL_FROM_ORDERS: optionalString, // order confirmation, status updates, refunds to customer
+  EMAIL_FROM_SUPPORT: optionalString, // admin/vendor operational notifications, KYC, vendor status
+  EMAIL_FROM_SALES: optionalString, // marketing, newsletter
 
   // Cloudinary
   CLOUDINARY_CLOUD_NAME: optionalString,
@@ -111,4 +118,29 @@ export function publicAppUrl(): string {
     process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
   if (vercel) return `https://${vercel}`;
   return "http://localhost:3000";
+}
+
+/**
+ * Origin derived from the incoming request. Use this for canonical URLs,
+ * the sitemap, and `metadataBase` so the site continues to expose the same
+ * host visitors actually used — even if APP_URL is missing or stale (e.g.
+ * after attaching a custom domain on Vercel). Falls back to publicAppUrl().
+ *
+ * Calling this opts the caller into dynamic rendering (it reads headers).
+ */
+export async function requestBaseUrl(): Promise<string> {
+  try {
+    const h = await headers();
+    const host = h.get("x-forwarded-host") ?? h.get("host");
+    if (host) {
+      const proto =
+        h.get("x-forwarded-proto") ??
+        (host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https");
+      return `${proto}://${host}`;
+    }
+  } catch {
+    // headers() throws when called outside a request context (e.g. build
+    // time, scripts). Fall through to the env-based URL.
+  }
+  return publicAppUrl();
 }
